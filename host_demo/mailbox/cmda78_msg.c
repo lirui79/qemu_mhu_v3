@@ -39,8 +39,8 @@ static int32_t cmda78_send_wait_event(cmda78_session_t* session, struct proc_obj
     int32_t errCode = CMD_ERR_SUCCESS;
     long retCode = 0;
 
-    spin_lock(&session->spinlock);
     retCode = cmda78_session_send(session, cmdMsg);
+    spin_lock(&session->spinlock);
     cnode   = cmdnode_alloc(cmdMsg->seqNum, cmdMsg->sessionID, cmdMsg->timeStamp, proc);
     cmdnode_insert(&session->cmdroot, cnode);
     spin_unlock(&session->spinlock);

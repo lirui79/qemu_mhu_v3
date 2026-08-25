@@ -115,15 +115,17 @@ void mhu_poll_rx(void)
     uint32_t db_int = mhu_read32(MHU_MBX_BASE + MHU_MBX_DBCH_INT_ST(0));
     uint32_t fc_int = mhu_read32(MHU_MBX_BASE + MHU_MBX_FCH_GRP_INT_ST(0));
     uint32_t ff_int = mhu_read32(MHU_MBX_BASE + MHU_MBX_FFCH_INT_ST(0));
-    uint32_t i, stat;
-
+    uint32_t i, stat, v;
+    arch_local_irq_restore(flags);
     if (db_int != 0) {
         for (i = 0; i < 4; i++) {
             if (db_int & (1u << i)) {
+                flags = arch_local_irq_save();
                 stat = mhu_receiver_status(MHU_MBX_BASE, i);
                 mhu_receiver_clear_irq(MHU_MBX_BASE, i, stat);
                 if (i == 0)
                     g_mbx_db_stat_0 |= stat;
+                arch_local_irq_restore(flags);
             }
         }
 
@@ -134,7 +136,8 @@ void mhu_poll_rx(void)
     if (fc_int != 0) {
         for (i = 0; i < 32; i++) {
             if (fc_int & (1u << i)) {
-                uint32_t v = mhu_read32(MHU_MBX_BASE + MHU_MBX_FCH_PAY32(i));
+                flags = arch_local_irq_save();
+                v = mhu_read32(MHU_MBX_BASE + MHU_MBX_FCH_PAY32(i));
                 /* write 0 to clear FC interrupt latch in hardware */
                 mhu_write32(MHU_MBX_BASE + MHU_MBX_FCH_PAY32(i), 0);
                 /*
@@ -151,6 +154,7 @@ void mhu_poll_rx(void)
                     g_mbx_fc_data_0[i] = v;
                     g_mbx_fc_stat_0 |= (1u << i);
                 }
+                arch_local_irq_restore(flags);
             }
         }
 
@@ -159,6 +163,7 @@ void mhu_poll_rx(void)
         }
     }
     if (ff_int != 0) {
+        flags = arch_local_irq_save();
         for (i = 0; i < 4; i++) {
             if (ff_int & (1u << i)) {
                 stat = mhu_read32(MHU_MBX_BASE + MHU_MBX_FFCW_INT_ST(i));
@@ -171,12 +176,13 @@ void mhu_poll_rx(void)
             }
         }
         g_mbx_ff_stat_0 |= ff_int;
+        arch_local_irq_restore(flags);
 
         if (irq_callbacks[2]) {
             irq_callbacks[2](0, ff_int);
         }
     }
-    arch_local_irq_restore(flags);
+
 }
 
 /**

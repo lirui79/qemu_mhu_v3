@@ -112,6 +112,18 @@ static inline uint32_t atomic_fetch_sub(atomic_t *a, uint32_t v)
     return ret;
 }
 
+static inline uint32_t atomic_equal_inc(atomic_t *a, uint32_t v)
+{
+    taskENTER_CRITICAL();
+    if (a->val == v) {
+        a->val++;
+        taskEXIT_CRITICAL();
+        return 1;
+    }
+    taskEXIT_CRITICAL();
+    return 0;
+}
+
 
 
 #ifdef __cplusplus

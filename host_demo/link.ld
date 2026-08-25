@@ -3,48 +3,44 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  *
- * AARCH64 linker script for Cortex-A76 bare-metal firmware.
+ * AARCH64 linker script for Cortex-A76 bare‑metal firmware.
  * Firmware is loaded at 0x80100000 (DDR_BASE + 0x100000).
  */
-
 ENTRY(_start)
-
 MEMORY {
   rom (rx)  : ORIGIN = 0x80100000, LENGTH = 0x400000
   ram (rwx) : ORIGIN = 0x80500000, LENGTH = 0x400000
 }
-
 SECTIONS
 {
-    . = 0x80100000;
-    __boot_start = .;
+  .vectors : {
+    *arch/startup.o(.text.boot)
+    *(.text._start)
+  } > rom
 
-    .text : {
-        KEEP(*(.text.boot))
-        KEEP(*(.text.vector_table))
-        *(.text*)
-    }
+  .text : {
+    *(.text)
+    *(.text.*)
+    *(.rodata .rodata.*)
+    *(.note.gnu.build-id)
+  } > rom
 
-    .rodata : {
-        *(.rodata*)
-    }
+  .data : {
+    *(.data .data.*)
+  } > ram
 
-    .data : {
-        *(.data*)
-    }
+  .bss : {
+    . = ALIGN (16);
+    __bss_start = . ;
+    *(.bss .bss.*)
+    *(COMMON)
+    . = ALIGN (16);
+    __bss_end = . ;
+  } > ram
 
-    . = ALIGN(8);
-    __bss_start = .;
-    .bss (NOLOAD) : {
-        *(.bss*)
-        *(COMMON)
-    }
-    . = ALIGN(8);
-    __bss_end = .;
-
-    . = ALIGN(16);
-    . = . + 0x20000;            /* 128KB startup/EL1 exception stack */
-    __stack_top = .;
-
-    __end = .;
+  .stack : {
+    . = ALIGN (16);
+    . += 0x200000;
+    _stack_top = .;
+  } > ram
 }

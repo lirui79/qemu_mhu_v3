@@ -1443,17 +1443,10 @@ int32_t vcmd_wait_cmdbuf_ready(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id, u16 *done_id
         obj = &vcmd_mgr->objs[cmdbuf_id];
 	}
 
-	errCode = wait_event_interruptible_timeout(vcmd_mgr->job_waitq, vcmd_get_done_job(vcmd_mgr, &obj), pdMS_TO_TICKS(1000));
-
-    if (errCode < 0) {// 被信号中断
-        return -ERESTARTSYS;
-    } else if (errCode == 0) {// 超时
-        vcmd_klog(LOGLVL_ERROR, "timeout!\n");
-        return -ETIMEDOUT;
-    } else {// 成功唤醒，条件已满足 // 此时可以安全地拷贝数据给用户
-
-    }
-
+	errCode = wait_event_interruptible(vcmd_mgr->job_waitq, vcmd_get_done_job(vcmd_mgr, &obj));
+	if (errCode == pdFALSE) {
+		return -ERESTARTSYS;
+	}
 
 	*done_id = obj->cmdbuf_id;
 	if (obj->cmdbuf_run_done == 1) {

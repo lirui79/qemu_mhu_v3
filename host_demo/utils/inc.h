@@ -34,7 +34,7 @@ typedef enum {
     CMD_SESSION_STATUS_IDLE = 0,
     CMD_SESSION_STATUS_RUN,
     CMD_SESSION_STATUS_EXIT,
-    CMD_SESSION_STATUS_STOP
+    CMD_SESSION_STATUS_USE
 } cmda78_session_status;
 
 #endif //_UTILS_INC_H_

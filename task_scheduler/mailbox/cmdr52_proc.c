@@ -21,6 +21,8 @@
 #include "cmdr52_mgr.h"
 #include "mhu_v3_r52.h"
 #include "cmdr52_proc.h"
+#include "vcx_vcmd_priv.h"
+#include "vcx_cmdbuf_obj.h"
 
 /* R52 每核堆仅 18KB,5 个 vcodec 线程不能用共享的 configMINIMAL_STACK_SIZE(4KB),
  * 统一用 256 words(1KB)专用栈(recv/work/wait 调用链浅,ts_printf 缓冲仅 33B,
@@ -221,22 +223,38 @@ static int32_t cmdr52_create_work_task(cmdr52_mgr_t *mgr) {
 }
 
 static void cmdr52_wait_thread_func(void *arg) {
-    cmdr52_mgr_t *mgr = (cmdr52_mgr_t*) cmdr52_mgr_get();
     vcmd_mgr_t *vcmd_mgr = ((vcmd_mgr_t *)arg);
-    int32_t code = 0;
+    cmdMsg_t *cmdMsg = NULL;
+    struct cmdbuf_obj *obj = NULL;
+    cmdr52_session_t *session = NULL;
+    cmdEvtRepCmdBufReady_Body_t *cmdBody = NULL;
+    int32_t retCode = CMD_ERR_SUCCESS;
+    uint16_t cmdbuf_id = ANY_CMDBUF_ID;
 
     ts_printf("%s:%s:%d  %u started\n", __FILE__, __func__, __LINE__, vcmd_mgr->vcmd_mgr_id);
     while (1) {
-
-        //cmdr52_wait
-        code = vcmd_wait_cmdbuf(vcmd_mgr);
-
-        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
-        if (code != 0) {
+        cmdbuf_id = ANY_CMDBUF_ID;
+        if (vcmd_wait_cmdbuf_ready(vcmd_mgr, cmdbuf_id, &cmdbuf_id) < 0) {
+            retCode = CMD_ERR_INVALID_PARAM;
+            ts_printf("%s:%s:%d return code:%d\n", __FILE__, __func__, __LINE__, retCode);
             continue;
         }
-        //atomic_inc(&mgr->refcount);
-        //wake_up_interruptible(&mgr->workwaitqueue);
+        ts_printf("%s:%s:%d cmdbuf_id:%d\n", __FILE__, __func__, __LINE__, cmdbuf_id);
+        obj = &vcmd_mgr->objs[cmdbuf_id];
+        session = obj->session;
+        cmdMsg = cmdr52_mgr_dequeue_cmdMsg();
+        cmd_init(cmdMsg);
+        cmdBody = (cmdEvtRepCmdBufReady_Body_t *)cmdMsg->data;
+        cmdMsg->cmdType     = CMD_EVT_REPORT_CMDBUF_READY;
+        cmdMsg->sessionID   = session->sessionID;
+        cmdMsg->timeStamp   = 0;
+        cmdMsg->cmdSize     = CMD_MSG_MIN_SIZE + sizeof(cmdEvtRepCmdBufReady_Body_t);
+        cmdBody->cmdbuf_id  = cmdbuf_id;
+        cmdBody->status     = 0;// 0 - success, > 0 - fail
+        cmdBody->vcmdmgr_id = vcmd_mgr->vcmd_mgr_id;
+        cmdBody->procObj    = session->procObj;// process object id
+        cmdr52_session_send(session, cmdMsg);
+        vcmd_release_cmdbuf(vcmd_mgr, cmdbuf_id);
     }
 
     ts_printf("%s:%s:%d  %u exiting\n", __FILE__, __func__, __LINE__, vcmd_mgr->vcmd_mgr_id);

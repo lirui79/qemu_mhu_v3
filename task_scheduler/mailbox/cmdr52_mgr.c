@@ -114,6 +114,7 @@ cmdr52_session_t*    cmdr52_mgr_get_idle_session(uint32_t r52coreID) {
             for (uint32_t j = 0; j < cmgr->vtb_size; ++j) {
                 if (cmgr->vtb[j].status == CMD_SESSION_STATUS_IDLE) {
                     session = &cmgr->vtb[j];
+                    session->status = CMD_SESSION_STATUS_USE;
                     break;
                 }
             }
@@ -225,86 +226,3 @@ int32_t cmdr52_mgr_proc_cmdMsg(cmdMsg_t *cmdMsg) {
 
     return cmdr52_session_vcodec(session, cmdMsg);
 }
-
-int32_t           vcmd_wait_cmdbuf(vcmd_mgr_t *vcmd_mgr) {
-    cmdMsg_t *cmdMsg = NULL;
-	struct cmdbuf_obj *obj = NULL;
-    cmdr52_session_t *session = NULL;
-    cmdEvtRepCmdBufReady_Body_t *cmdBody = NULL;
-    int32_t retCode = CMD_ERR_SUCCESS;
-    uint16_t cmdbuf_id = ANY_CMDBUF_ID;
-    if (vcmd_wait_cmdbuf_ready(vcmd_mgr, cmdbuf_id, &cmdbuf_id) < 0) {
-        retCode = CMD_ERR_INVALID_PARAM;
-        return retCode;
-    };
-    ts_printf("%s:%s:%d cmdbuf_id:%d\n", __FILE__, __func__, __LINE__, cmdbuf_id);
-    obj = &vcmd_mgr->objs[cmdbuf_id];
-    session = obj->session;
-    cmdMsg = cmdr52_mgr_dequeue_cmdMsg();
-    cmd_init(cmdMsg);
-    cmdBody = (cmdEvtRepCmdBufReady_Body_t *)cmdMsg->data;
-    cmdMsg->cmdType     = CMD_EVT_REPORT_CMDBUF_READY;
-    cmdMsg->sessionID   = session->sessionID;
-    cmdMsg->timeStamp   = 0;
-    cmdMsg->cmdSize     = CMD_MSG_MIN_SIZE + sizeof(cmdEvtRepCmdBufReady_Body_t);
-    cmdBody->cmdbuf_id  = cmdbuf_id;
-    cmdBody->status     = 0;// 0 - success, > 0 - fail
-    cmdBody->vcmdmgr_id = vcmd_mgr->vcmd_mgr_id;
-    cmdBody->procObj    = session->procObj;// process object id
-    cmdr52_session_send(session, cmdMsg);
-    vcmd_release_cmdbuf(vcmd_mgr, cmdbuf_id);
-    //cmdr52_mgr_release_cmdMsg(cmdMsg);
-    return 0;
-}
-
-#if 0
-int32_t vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, cmdReqRunCmdBuf_Body_t *cmd_body){
-	struct cmdbuf_obj *obj;
-	uint16_t cmdbuf_id = cmd_body->cmdbuf_id;
-	uint16_t batchcount = ((cmd_body->interrupt_ctrl >> 32) & 0xff);
-
-	if (cmdbuf_id >= SLOT_NUM_CMDBUF) {		//should not happen
-		ts_printf("%s: ERROR cmdbuf_id %d!!\n", __func__, cmdbuf_id);
-		return -1;
-	}
-
-	obj = &vcmd_mgr->objs[cmdbuf_id];
-	obj->owner          = cmd_body->ownerID;
-	obj->session        = session;
-	obj->cmdbuf_size    = cmd_body->cmdbuf_size;
-	obj->interrupt_ctrl = cmd_body->interrupt_ctrl;
-	obj->module_type    = cmd_body->module_type;
-	obj->core_mask      = cmd_body->core_mask;
-	obj->core_id        = 0;
-	cmd_body->core_id = obj->core_id;
-//    ts_printf("Assign cmdbuf[%d] to core[%d]\n", cmdbuf_id, cmd_body->core_id);
-    vcmd_add_done_job(vcmd_mgr, obj);
-	return 0;
-}
-
-
-int32_t vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_t ownerID, cmdRspDropOwner_Body_t *cmd_body){
-    struct cmdbuf_obj *obj = 0;
-    uint16_t cmdbuf_id = 0, handled = 0;
-	long dropped_cmdbuf_num = 0;
-    for (cmdbuf_id = 0; cmdbuf_id < SLOT_NUM_CMDBUF; cmdbuf_id++) {
-        obj = &vcmd_mgr->objs[cmdbuf_id];
-        if ((ownerID != 0x00) &&(obj->owner == ownerID) && (obj->session == session)) {
-            obj->owner = 0;
-            obj->session = NULL;
-            ts_printf("Drop cmdbuf[%d] from core[%d]\n", cmdbuf_id, obj->core_id);
-            dropped_cmdbuf_num++;
-            handled++;
-        }
-    }
-
-    if ((ownerID != 0x00) && (handled > 0)) {
-        wake_up_interruptible(&vcmd_mgr->job_waitq);
-    }
-	cmd_body->cmdbuf_num = dropped_cmdbuf_num;
-    return 0;
-}
-#endif
-
-
-

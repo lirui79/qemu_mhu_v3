@@ -274,8 +274,11 @@ void boot_main(void)
     vcodeca78_init();
 
     vcodec_test_encode();
+    vcodec_test_encode();
+//    vcodec_test_encode();
 
- //   vcodec_test_decode();//*/
+    vcodec_test_decode();
+    vcodec_test_decode();//*/
 
     /* Start the scheduler - never returns */
     vTaskStartScheduler();

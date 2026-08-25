@@ -65,14 +65,14 @@ static void cmda78_work_thread_proc(void *arg) {
         retCode = wait_event_interruptible(mgr->workwaitqueue, atomic_read(&mgr->refcount) > 0);
         ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, retCode);
         if (retCode == pdFALSE) {
-            break;
+            continue;
         }
 
         cmdMsg = cmda78_acquire_cmdMsg();
         if (cmdMsg == NULL) {
             continue;
         }
-        ts_printf("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
+//        ts_printf("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
             (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
             cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32);
         retCode = cmda78_proc_cmdMsg(cmdMsg);

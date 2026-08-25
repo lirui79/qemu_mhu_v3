@@ -35,10 +35,14 @@ static inline uint32_t kref_read(struct kref *kref)
     return atomic_read(&kref->refcount);
 }
 
-
 static inline void kref_set(struct kref *kref, uint32_t val)
 {
     atomic_set(&kref->refcount, val);
+}
+
+static inline uint32_t kref_equal_inc(struct kref *kref, uint32_t val)
+{
+    return atomic_equal_inc(&kref->refcount, val);
 }
 
 #ifdef __cplusplus

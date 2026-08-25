@@ -58,7 +58,6 @@ static cmdnode_t *cmdsession_search_cmdnode(cmda78_session_t *session, uint32_t 
 
 static int32_t cmdsession_wake_up_all(cmdnode_t *cnode, cmdMsg_t *cmdMsg) {
     int32_t  retCode = CMD_ERR_SUCCESS;
-    //memcpy(cnode->cmdMsg, (uint8_t*) &cmdMsg, cmdMsg->cmdSize);
     cnode->cmdMsg = cmdMsg;
     retCode = cnode->code;
 	wake_up_interruptible_all(&cnode->wait);
@@ -85,12 +84,17 @@ static int32_t cmd_system_open_session(cmda78_session_t *session, cmdMsg_t *cmdM
         proc->session = cmd_session;
 
         if (cmd_session != NULL) {
+            spin_lock(&cmd_session->spinlock);
             cmd_session->proc = proc;
             cmd_session->status  = CMD_SESSION_STATUS_RUN;
             if (cmd_session != session) {
+                //ts_printf("++++++++++++%s:%s:%d %d ptr=%08x %x  proc=%08x++++++++++++\n", __FILE__, __func__, __LINE__, cnode->code, (uint32_t)(uintptr_t)session, cmdBody->sessionID, (uint32_t)(uintptr_t)cmd_session);
                 cmd_session->seqRNum = 0x00;// sequence number, from 0 to 0xFFFFFFFF
+                ts_printf("++++++++++++%s:%s:%d %d ptr=%08x %x  proc=%08x++++++++++++\n", __FILE__, __func__, __LINE__, cnode->code, (uint32_t)(uintptr_t)session, cmdBody->sessionID, (uint32_t)(uintptr_t)cmd_session);
                 cmd_session->seqSNum = 0x00;// sequence number, from 0 to 0xFFFFFFFF
-            }
+                //ts_printf("++++++++++++%s:%s:%d %d ptr=%08x %x  proc=%08x++++++++++++\n", __FILE__, __func__, __LINE__, cnode->code, (uint32_t)(uintptr_t)session, cmdBody->sessionID, (uint32_t)(uintptr_t)cmd_session);
+                }
+            spin_unlock(&cmd_session->spinlock);
         } else {
             cnode->code = CMD_ERR_INVALID_SESSIONID;
         }
@@ -121,10 +125,12 @@ static int32_t cmd_system_close_session(cmda78_session_t *session, cmdMsg_t *cmd
         proc->session = NULL;
 
         if (cmd_session != NULL) {
+            spin_lock(&cmd_session->spinlock);
             cmd_session->status  = CMD_SESSION_STATUS_IDLE;
             cmd_session->seqRNum = 0x00;// sequence number, from 0 to 0xFFFFFFFF
             cmd_session->seqSNum = 0x00;// sequence number, from 0 to 0xFFFFFFFF
             cmd_session->proc = NULL;
+            spin_unlock(&cmd_session->spinlock);
         } else {
             cnode->code = CMD_ERR_INVALID_SESSIONID;
         }
@@ -138,11 +144,11 @@ static int32_t cmd_system_close_session(cmda78_session_t *session, cmdMsg_t *cmd
 
 static int32_t cmd_system_report(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
     cmdEvtRepCmdError_Body_t *cmdBody = (cmdEvtRepCmdError_Body_t *)cmdMsg->data;
-    ts_printf("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
+    //ts_printf("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
             (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
             cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32);
 
-    ts_printf("code:%x cmdType:%x seqNum:%x sessionID:%x procObj:%llx timeStamp:%llx\n", \
+    //ts_printf("code:%x cmdType:%x seqNum:%x sessionID:%x procObj:%llx timeStamp:%llx\n", \
             cmdBody->code, cmdBody->cmdType, cmdBody->seqNum, cmdBody->sessionID, \
             (unsigned long long)cmdBody->procObj, (unsigned long long)cmdBody->timeStamp);
     cmda78_release_cmdMsg(cmdMsg);
@@ -284,7 +290,9 @@ int32_t        cmda78_session_vcodec(cmda78_session_t *session, cmdMsg_t *cmdMsg
 
 int32_t        cmda78_session_send(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
     cmdMsg->sessionID    = session->sessionID;
+    spin_lock(&session->spinlock);
     cmdMsg->seqNum       = session->seqSNum++;
+    spin_unlock(&session->spinlock);
     cmdMsg->timeStamp    = 0x00000000;
     return cmda78_send(cmdMsg);
 }

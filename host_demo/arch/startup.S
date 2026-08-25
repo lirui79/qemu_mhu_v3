@@ -79,7 +79,7 @@ _el1_init:
     msr SPSel, #1
 
     /* Initialize SP_EL1 stack pointer */
-    ldr x0, =__stack_top
+    ldr x0, =_stack_top
     mov sp, x0
 
     /* Zero BSS section */

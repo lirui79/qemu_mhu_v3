@@ -43,7 +43,7 @@ static cmdnode_t* get_cmdnode(void) {
     cmdnode_t* cnode = NULL;
     for (int i = 0; i < 32; i++) {
         cnode = &cnodes[i];
-        if (kref_read(&cnode->refcount) == 0) {
+        if (kref_equal_inc(&cnode->refcount, 0) == 1) {
             return cnode;
         }
     }
@@ -65,8 +65,8 @@ cmdnode_t*    cmdnode_alloc(uint32_t ackNum, uint32_t sessionID, uint64_t timeSt
     cnode->procObj   = (uint64_t)proc;
     cnode->proc      = proc;
     cnode->code      = CMD_ERR_UNKNOWN;
-	init_waitqueue_head(&cnode->wait);
-    kref_init(&cnode->refcount);//refcount 1
+//	init_waitqueue_head(&cnode->wait);
+//    kref_init(&cnode->refcount);//refcount 1
     cnode->cmdMsg    = NULL;
     return cnode;
 }

@@ -127,6 +127,7 @@ int ts_printf(const char *fmt, ...)
         fmt++;
     }
 
+    arch_local_irq_restore(flags);
     va_end(args);
     return 0;
 }
