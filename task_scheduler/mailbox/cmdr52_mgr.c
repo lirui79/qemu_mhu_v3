@@ -257,6 +257,7 @@ int32_t           vcmd_wait_cmdbuf(vcmd_mgr_t *vcmd_mgr) {
     return 0;
 }
 
+#if 0
 int32_t vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, cmdReqRunCmdBuf_Body_t *cmd_body){
 	struct cmdbuf_obj *obj;
 	uint16_t cmdbuf_id = cmd_body->cmdbuf_id;
@@ -303,7 +304,7 @@ int32_t vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_
 	cmd_body->cmdbuf_num = dropped_cmdbuf_num;
     return 0;
 }
-
+#endif
 
 
 

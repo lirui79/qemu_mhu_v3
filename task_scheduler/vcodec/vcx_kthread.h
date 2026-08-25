@@ -11,34 +11,29 @@
 **                  on all copies and should not be removed.                    **
 **                                                                              **
 **********************************************************************************
-**                               include  inc header                            **
+**                          include vcx kthread header                          **
 *********************************************************************************/
 
-#ifndef _UTILS_INC_H_
-#define _UTILS_INC_H_
+#ifndef _VCX_KTHREAD_H_
+#define _VCX_KTHREAD_H_
 
+#include "vcx_vcmd_priv.h"
 
-#include <stdint.h>
-#include <stddef.h>
-
-//#define  VCMD_ALLOC_MEM
-
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
+#ifdef __cplusplus
+extern "C" {
 #endif
 
+void _vcmd_kthread_wakeup_irq(vcmd_mgr_t *vcmd_mgr, unsigned int value);
 
-//#define ANY_CMDBUF_ID                       (0xFFFF)
-/* R52 本地 RAM 已扩到 16MB:vcmd_mgr_r52[2] 静态 bss = SLOT×48B×2 管理器,
- * 256 槽需 24.6KB,空间充足。A76 侧 host_demo 的 utils/inc.h 同样保持 256。 */
-#define SLOT_NUM_CMDBUF						(256)
+void _vcmd_kthread_wakeup(vcmd_mgr_t *vcmd_mgr, unsigned int value);
+
+void _vcmd_kthread_create(vcmd_mgr_t *vcmd_mgr);
+
+void _vcmd_kthread_stop(vcmd_mgr_t *vcmd_mgr);
 
 
-typedef enum {
-    CMD_SESSION_STATUS_IDLE = 0,
-    CMD_SESSION_STATUS_RUN,
-    CMD_SESSION_STATUS_EXIT,
-    CMD_SESSION_STATUS_STOP
-} cmda78_session_status;
+#ifdef __cplusplus
+}
+#endif
 
-#endif //_UTILS_INC_H_
+#endif /*_VCX_KTHREAD_H_*/

@@ -11,34 +11,35 @@
 **                  on all copies and should not be removed.                    **
 **                                                                              **
 **********************************************************************************
-**                               include  inc header                            **
+**                            include vcx cfg header                            **
 *********************************************************************************/
 
-#ifndef _UTILS_INC_H_
-#define _UTILS_INC_H_
+#ifndef _VCX_CFG_H_
+#define _VCX_CFG_H_
+
+#include "vcx_vcmd_defs.h"
 
 
-#include <stdint.h>
-#include <stddef.h>
+/* submodule config */
+struct sub_mod_cfg {
+	enum subsys_module_id sub_mod_id;
 
-//#define  VCMD_ALLOC_MEM
+	unsigned int io_off; // submodule reg base (offset to vcmd reg-base)
+	unsigned int io_size;   // submodule io size
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+	unsigned int rreg_id;  // start reg-id to read out when init driver,
+				   // 0xffff means not need to read.
+	unsigned int rreg_num;  // number of registers to read out when init driver
+};
+
+/*for all vcmds, the config info should be listed here for subsequent use*/
+struct vcmd_cfg {
+	unsigned long vcmd_base_addr;	//vcmd reg_base (bus address)
+	int vcmd_irq;
+	unsigned int sub_module_type; /*input vce=0,IM=1,vcd=2，jpege=3, jpegd=4*/
+	unsigned int priority; //the priority of vcmd
+	struct sub_mod_cfg submodule_cfg[SUB_MOD_MAX];
+};
 
 
-//#define ANY_CMDBUF_ID                       (0xFFFF)
-/* R52 本地 RAM 已扩到 16MB:vcmd_mgr_r52[2] 静态 bss = SLOT×48B×2 管理器,
- * 256 槽需 24.6KB,空间充足。A76 侧 host_demo 的 utils/inc.h 同样保持 256。 */
-#define SLOT_NUM_CMDBUF						(256)
-
-
-typedef enum {
-    CMD_SESSION_STATUS_IDLE = 0,
-    CMD_SESSION_STATUS_RUN,
-    CMD_SESSION_STATUS_EXIT,
-    CMD_SESSION_STATUS_STOP
-} cmda78_session_status;
-
-#endif //_UTILS_INC_H_
+#endif /*_VCX_CFG_H_*/

@@ -87,9 +87,9 @@ int32_t              cmdr52_mgr_proc_cmdMsg(cmdMsg_t *cmdMsg);
 
 int32_t              vcmd_wait_cmdbuf(vcmd_mgr_t *vcmd_mgr);
 
-int32_t              vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, cmdReqRunCmdBuf_Body_t *cmd_body);
+//int32_t              vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, cmdReqRunCmdBuf_Body_t *cmd_body);
 
-int32_t              vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_t ownerID, cmdRspDropOwner_Body_t *cmd_body);
+//int32_t              vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_t ownerID, cmdRspDropOwner_Body_t *cmd_body);
 
 
 #ifdef __cplusplus

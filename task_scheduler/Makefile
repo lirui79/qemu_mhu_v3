@@ -53,13 +53,13 @@ INCLUDES       := \
 	-I$(PROJ_ROOT)/include \
 	-I$(PROJ_ROOT)/mailbox \
 	-I$(PROJ_ROOT)/system \
-	-I$(PROJ_ROOT)/task \
 	-I$(PROJ_ROOT)/utils \
 	-I$(PROJ_ROOT)/vcodec \
 	-I$(KERNEL_DIR)/include \
 	-I$(GCC_PORT_DIR)
 
 
+#	-I$(PROJ_ROOT)/task \
 # ==============================================================================
 # Source Files
 # 【关键补充】必须添加 arch/start.S 启动汇编，提供 _start 入口
@@ -110,7 +110,6 @@ VCODEC_SRCS    := \
     $(PROJ_ROOT)/mailbox/cmdr52_mgr.c \
     $(PROJ_ROOT)/mailbox/mhu_v3_r52.c \
     $(PROJ_ROOT)/mailbox/cmdr52_session.c \
-    $(PROJ_ROOT)/task/vcodec.c \
     $(PROJ_ROOT)/utils/kref.c \
     $(PROJ_ROOT)/utils/crc32.c \
     $(PROJ_ROOT)/utils/rbtree.c \
@@ -118,7 +117,30 @@ VCODEC_SRCS    := \
     $(PROJ_ROOT)/utils/cqueue.c \
     $(PROJ_ROOT)/utils/ddr_mem.c \
     $(PROJ_ROOT)/utils/wait_queue.c \
-    $(PROJ_ROOT)/vcodec/vcx_cmdbuf_obj.c
+    $(PROJ_ROOT)/vcodec/bidirect_list.c \
+    $(PROJ_ROOT)/vcodec/vcd_abnormal_irq.c \
+    $(PROJ_ROOT)/vcodec/vcd_vcmd_pm.c \
+    $(PROJ_ROOT)/vcodec/vcd_vcmd.c \
+    $(PROJ_ROOT)/vcodec/vce_abnormal_irq.c \
+    $(PROJ_ROOT)/vcodec/vce_vcmd_pm.c \
+    $(PROJ_ROOT)/vcodec/vce_vcmd.c \
+    $(PROJ_ROOT)/vcodec/vcmdswhwregisters.c \
+    $(PROJ_ROOT)/vcodec/vcodec.c \
+    $(PROJ_ROOT)/vcodec/vcx_axi2to1.c \
+    $(PROJ_ROOT)/vcodec/vcx_axife.c \
+    $(PROJ_ROOT)/vcodec/vcx_cmdbuf_obj.c \
+    $(PROJ_ROOT)/vcodec/vcx_irq_simulation.c \
+    $(PROJ_ROOT)/vcodec/vcx_irq_timer.c \
+    $(PROJ_ROOT)/vcodec/vcx_kthread.c \
+    $(PROJ_ROOT)/vcodec/vcx_vcmd_dbg_log.c \
+    $(PROJ_ROOT)/vcodec/vcx_vcmd_dbgfs.c \
+    $(PROJ_ROOT)/vcodec/vcx_vcmd_irq.c \
+    $(PROJ_ROOT)/vcodec/vcx_watchdog.c
+
+
+
+
+#    $(PROJ_ROOT)/task/vcodec.c \
 
 # 汇总源码
 SRC_C          := $(APP_SRCS) $(KERNEL_SRCS) $(PORT_SRCS_C) $(HEAP_SRCS) $(VCODEC_SRCS)

@@ -90,7 +90,6 @@ HEAP_SRCS      := $(MEM_MANG_DIR)/heap_4.c
 # 5. 【修复核心】裸机启动汇编，提供 _start 入口
 STARTUP_ASM    := \
     $(PROJ_ROOT)/arch/startup.S \
-	$(PROJ_ROOT)/arch/probe_handler.S \
 	$(PROJ_ROOT)/arch/gicv3_cpuif.S
 
 # 6. FreeRTOS内核

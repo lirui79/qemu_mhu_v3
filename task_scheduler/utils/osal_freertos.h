@@ -78,10 +78,12 @@ typedef u64 ptr_t;
 
 /**@}*/
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define vmalloc  pvPortMalloc
 #define vfree    vPortFree
 
+#define __iomem
 
 #define container_of(ptr, type, member) ({              \
     const typeof( ((type *)0)->member ) *__mptr = (ptr); \
@@ -91,6 +93,16 @@ typedef u64 ptr_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
+static inline uint32_t ioread32(const volatile uint32_t *addr)
+{
+    return *addr;
+}
+
+// 向 32 位寄存器写入值（ARM R52 专用）
+static inline void iowrite32(uint32_t value, volatile uint32_t *addr)
+{
+    *addr = value;
+}
 
 
 #ifdef __cplusplus

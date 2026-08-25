@@ -11,34 +11,39 @@
 **                  on all copies and should not be removed.                    **
 **                                                                              **
 **********************************************************************************
-**                               include  inc header                            **
+**                       include debug log headers                              **
 *********************************************************************************/
 
-#ifndef _UTILS_INC_H_
-#define _UTILS_INC_H_
-
-
-#include <stdint.h>
-#include <stddef.h>
-
-//#define  VCMD_ALLOC_MEM
+#ifndef _VCX_VCMD_DBG_LOG_H_
+#define _VCX_VCMD_DBG_LOG_H_
 
 #ifdef __FREERTOS__
 #include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
 #endif
 
+#include "vcx_vcmd_priv.h"
 
-//#define ANY_CMDBUF_ID                       (0xFFFF)
-/* R52 本地 RAM 已扩到 16MB:vcmd_mgr_r52[2] 静态 bss = SLOT×48B×2 管理器,
- * 256 槽需 24.6KB,空间充足。A76 侧 host_demo 的 utils/inc.h 同样保持 256。 */
-#define SLOT_NUM_CMDBUF						(256)
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
-typedef enum {
-    CMD_SESSION_STATUS_IDLE = 0,
-    CMD_SESSION_STATUS_RUN,
-    CMD_SESSION_STATUS_EXIT,
-    CMD_SESSION_STATUS_STOP
-} cmda78_session_status;
+#ifdef VCMD_DEBUG_INTERNAL
 
-#endif //_UTILS_INC_H_
+void _dbg_log_instr(u32 offset, u32 instr, u32 *size, char *str);
+
+void _dbg_log_last_cmd(struct cmdbuf_obj *obj);
+
+void _dbg_log_cmdbuf(struct cmdbuf_obj *obj);
+
+void _dbg_log_dev_regs(struct hantrovcmd_dev *dev, u32 dump);
+
+void printk_vcmd_register_debug(const void *hwregs, char *info);
+
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /*_VCX_VCMD_DBG_LOG_H_*/

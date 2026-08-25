@@ -11,34 +11,35 @@
 **                  on all copies and should not be removed.                    **
 **                                                                              **
 **********************************************************************************
-**                               include  inc header                            **
+**                         include vcx vcmd irq header                          **
 *********************************************************************************/
 
-#ifndef _UTILS_INC_H_
-#define _UTILS_INC_H_
+#ifndef _VCX_VCMD_IRQ_H_
+#define _VCX_VCMD_IRQ_H_
 
+#include "vcx_vcmd_priv.h"
 
-#include <stdint.h>
-#include <stddef.h>
+enum irqreturn {
+    IRQ_NONE        = (0 << 0),
+    IRQ_HANDLED     = (1 << 0),
+    IRQ_WAKE_THREAD = (1 << 1),
+};
 
-//#define  VCMD_ALLOC_MEM
+typedef enum irqreturn irqreturn_t;
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 
-//#define ANY_CMDBUF_ID                       (0xFFFF)
-/* R52 本地 RAM 已扩到 16MB:vcmd_mgr_r52[2] 静态 bss = SLOT×48B×2 管理器,
- * 256 槽需 24.6KB,空间充足。A76 侧 host_demo 的 utils/inc.h 同样保持 256。 */
-#define SLOT_NUM_CMDBUF						(256)
+
+irqreturn_t hantrovcmd_isr(int irq, void *handler);
 
 
-typedef enum {
-    CMD_SESSION_STATUS_IDLE = 0,
-    CMD_SESSION_STATUS_RUN,
-    CMD_SESSION_STATUS_EXIT,
-    CMD_SESSION_STATUS_STOP
-} cmda78_session_status;
 
-#endif //_UTILS_INC_H_
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _VCX_VCMD_IRQ_H_ */

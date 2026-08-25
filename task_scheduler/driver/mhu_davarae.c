@@ -335,15 +335,14 @@ uint32_t mhu_send_data(uint32_t ch, void *data_ptr, uint32_t data_len)
 {
     uint32_t *dwptr = (uint32_t*)data_ptr;
     uint32_t  dwlen = data_len / 4;
-    uint32_t  i, flg, sndlen, irq_st;
+    uint32_t  i, flg, irq_st;
     if ((data_len % 4) != 0) {
         ts_printf("MHUS: invalid len %u\n", data_len);
         return 0;
     }
 
-    sndlen = mhu_read32(MHU_PBX_BASE + MHU_PBX_FFCW_ST(ch));
-
-    ts_printf("send: ch=%u sndlen=%x\n", ch, sndlen);
+//    sndlen = mhu_read32(MHU_PBX_BASE + MHU_PBX_FFCW_ST(ch));
+//    ts_printf("send: ch=%u sndlen=%x\n", ch, sndlen);
     irq_st = arch_local_irq_save();
     /* 平台 MHU 模型:数据逐 word 经 PBX FIFO(push32)送达对端 FIFO,
      * 每 word 需写 FFCW_FLG 标记 SOT(首)/EOT+ACK(末)。不能用
@@ -446,7 +445,7 @@ uint32_t mhu_recv_data(uint32_t ch, void *buf_ptr, uint32_t buf_len)
         flags = mhu_read32(MHU_MBX_BASE + MHU_MBX_FFCW_FLG(ch));
         stale = mhu_read32(MHU_MBX_BASE + MHU_MBX_FFCW_CTRL(ch));
         arch_local_irq_restore(irq_st);
-        ts_printf("MBX: data=0x%x flg=0x%x stale=0x%x st=0x%x\n", val, flags, stale, st);
+//        ts_printf("MBX: data=0x%x flg=0x%x stale=0x%x st=0x%x\n", val, flags, stale, st);
         if (flags & 0x4) {// 0
             if ((flags & 0x1) != 0)
                 sot = 1;
