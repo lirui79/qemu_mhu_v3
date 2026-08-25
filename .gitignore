@@ -1,0 +1,30 @@
+# Build artifacts
+task_scheduler/build/
+host_demo/build/
+runtime_demo/build/
+runtime_demo/driver/*.o
+runtime_demo/driver/*.ko
+runtime_demo/driver/*.mod
+runtime_demo/driver/*.mod.c
+runtime_demo/driver/.*.cmd
+runtime_demo/driver/Module.symvers
+runtime_demo/driver/modules.order
+linux_a76/build/
+linux_a76/bins/
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Simulation runtime temp files
+log/
+
+# Linux source
+linux-6.8

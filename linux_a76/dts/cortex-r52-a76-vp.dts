@@ -1,0 +1,87 @@
+/dts-v1/;
+
+/ {
+	compatible = "demo,cortex-r52-a76-vp";
+	model = "Cortex-R52 and Cortex-A76 virtual platform";
+	#address-cells = <2>;
+	#size-cells = <2>;
+	interrupt-parent = <&gic>;
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs = "console=ttyAMA0,115200 earlycon=pl011,0xd0000000 rdinit=/init loglevel=8";
+		linux,initrd-start = <0x0 0x84100000>;
+		linux,initrd-end = <0x0 0x85100000>;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			compatible = "arm,cortex-a76";
+			device_type = "cpu";
+			reg = <0>;
+		};
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x20000000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		r52_ipc: buffer@90000000 {
+			reg = <0x0 0x90000000 0x0 0x00100000>;
+			no-map;
+		};
+	};
+
+	clk50mhz: clock-50000000 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <50000000>;
+	};
+
+	gic: interrupt-controller@2f020000 {
+		compatible = "arm,gic-v3";
+		reg = <0x0 0x2f020000 0x0 0x00010000>,
+		      <0x0 0x2f120000 0x0 0x00020000>;
+		interrupt-controller;
+		#interrupt-cells = <3>;
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <1 13 8>, <1 14 8>, <1 11 8>, <1 10 8>;
+		always-on;
+	};
+
+	uart0: serial@d0000000 {
+		compatible = "arm,pl011", "arm,primecell";
+		reg = <0x0 0xd0000000 0x0 0x1000>;
+		interrupts = <0 18 4>;
+		clocks = <&clk50mhz>, <&clk50mhz>;
+		clock-names = "uartclk", "apb_pclk";
+		status = "okay";
+	};
+
+	r52-gpu@2fc20000 {
+		compatible = "demo,r52-gpu-mhu";
+		reg = <0x0 0x2fc20000 0x0 0x00010000>,
+		      <0x0 0x2fc50000 0x0 0x00010000>,
+		      <0x0 0x90000000 0x0 0x00100000>;
+		reg-names = "pbx", "mbx", "shared";
+		interrupts = <0 78 4>, <0 46 4>;
+		interrupt-names = "rx", "tx";
+		status = "okay";
+	};
+};
