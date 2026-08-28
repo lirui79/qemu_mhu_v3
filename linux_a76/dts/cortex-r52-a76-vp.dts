@@ -1,34 +1,28 @@
 /dts-v1/;
-
 / {
 	compatible = "demo,cortex-r52-a76-vp";
 	model = "Cortex-R52 and Cortex-A76 virtual platform";
 	#address-cells = <2>;
 	#size-cells = <2>;
 	interrupt-parent = <&gic>;
-
 	aliases {
 		serial0 = &uart0;
 	};
-
 	chosen {
 		stdout-path = "serial0:115200n8";
 		bootargs = "console=ttyAMA0,115200 earlycon=pl011,0xd0000000 rdinit=/init loglevel=8";
 		linux,initrd-start = <0x0 0x84100000>;
 		linux,initrd-end = <0x0 0x85100000>;
 	};
-
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
-
 		cpu@0 {
 			compatible = "arm,cortex-a76";
 			device_type = "cpu";
 			reg = <0>;
 		};
 	};
-
 	memory@80000000 {
 		device_type = "memory";
 		reg = <0x0 0x80000000 0x0 0x20000000>;
@@ -38,9 +32,14 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
-
 		r52_ipc: buffer@90000000 {
 			reg = <0x0 0x90000000 0x0 0x00100000>;
+			no-map;
+		};
+
+		vpu_memalloc: vpu-pool@90100000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x90100000 0x0 0x08000000>;
 			no-map;
 		};
 	};
@@ -74,14 +73,39 @@
 		status = "okay";
 	};
 
-	r52-gpu@2fc20000 {
-		compatible = "demo,r52-gpu-mhu";
+	/* MHU真实硬件节点，有MMIO寄存器 */
+	r52-vpu@2fc20000 {
+		compatible = "vcx,r52-vpu-mhu";
 		reg = <0x0 0x2fc20000 0x0 0x00010000>,
 		      <0x0 0x2fc50000 0x0 0x00010000>,
 		      <0x0 0x90000000 0x0 0x00100000>;
 		reg-names = "pbx", "mbx", "shared";
 		interrupts = <0 78 4>, <0 46 4>;
 		interrupt-names = "rx", "tx";
+		memory-region = <&vpu_memalloc>;
 		status = "okay";
 	};
+
+	/* 虚拟逻辑节点：无reg、无@地址、无interrupts、无clocks；仅OF匹配用 */
+/*
+	vcx {
+		compatible = "vsi,vcx";
+		memory-region = <&r52_ipc>;
+		r52-mhu-phandle = <&r52-vpu>;
+		status = "okay";
+	};
+
+	vce {
+		compatible = "vsi,vce";
+		memory-region = <&r52_ipc>;
+		r52-mhu-phandle = <&r52-vpu>;
+		status = "okay";
+	};
+
+	vcd {
+		compatible = "vsi,vcd";
+		memory-region = <&r52_ipc>;
+		r52-mhu-phandle = <&r52-vpu>;
+		status = "okay";
+	};*/
 };

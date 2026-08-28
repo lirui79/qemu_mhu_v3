@@ -54,3 +54,11 @@ runtime_demo/build/launch_kernel
 
 完整 Linux payload 仍由 `linux_a76/Makefile` 打包；该 Makefile 会从本目录
 取 `r52_gpu.ko` 和 `launch_kernel` 源码。
+
+
+ cd runtime_demo/
+ make KERNEL_BUILD=/home/stone/workspace/qemu_mhu_v3/linux_a76/build/kernel 
+ make KERNEL_BUILD=/home/stone/workspace/qemu_mhu_v3/linux_a76/build/kernel  clean
+
+ make KERNEL_BUILD=/home/stone/workspace/qemu_mhu_v3/linux_a76/build/kernel ENC_ENV=arm64_linux TRACE=n DEC_ENV=arm_pclinux USE_MODEL_SIMULATION=n USE_VCMD=y STATIC=y
+
