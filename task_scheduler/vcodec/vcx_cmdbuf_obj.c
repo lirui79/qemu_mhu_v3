@@ -1626,6 +1626,7 @@ int32_t vcmd_flush_slice_regs(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id)
  */
 int32_t vcmd_polling_cmdbuf(vcmd_mgr_t *vcmd_mgr, u16 core_id)
 {
+#ifdef VCMD_ALLOC_MEM
 	int32_t   irq = core_id;
     if (core_id != 0xFFFF) {
         hantrovcmd_isr(irq, vcmd_mgr);
@@ -1634,6 +1635,7 @@ int32_t vcmd_polling_cmdbuf(vcmd_mgr_t *vcmd_mgr, u16 core_id)
 	        hantrovcmd_isr(irq, vcmd_mgr);
 		}
 	}
+#endif
 	return 0;
 }
 

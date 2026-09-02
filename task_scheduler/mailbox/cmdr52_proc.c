@@ -35,11 +35,10 @@ int32_t cmdr52_send(cmdMsg_t *cmdMsg) {
     int32_t retCode = 0;
     uint32_t r52ID = ((cmdMsg->sessionID & 0xFFFF0000) >> 16);
 
-    ts_printf("%s:%s:%d r52ID:%d started\n", __FILE__, __func__, __LINE__, r52ID);
+//    ts_printf("%s:%s:%d r52ID:%d started\n", __FILE__, __func__, __LINE__, r52ID);
     cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
 // mailbox_send(cmdMsg);
     retCode = mhu_v3_send_data(r52ID, (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-    cmdr52_mgr_release_cmdMsg(cmdMsg);
     return retCode;
 }
 
@@ -118,7 +117,7 @@ static void cmdr52_recv_thread_func(void *arg) {
 
 // mailbox_recv(cmdMsg);
         code = mhu_v3_recv_data(core52_mgr->r52coreID, (uint8_t *)cmdMsg, &cmdMsg->cmdSize);
-        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
+//        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
         if (code != 0) {
             cmdr52_mgr_cancel_cmdMsg(cmdMsg);
             continue;
@@ -129,7 +128,7 @@ static void cmdr52_recv_thread_func(void *arg) {
         cmdr52_mgr_queue_cmdMsg(cmdMsg);
         atomic_inc(&mgr->refcount);
         wake_up_interruptible(&mgr->workwaitqueue);
-        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
+        //ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
     }
 
     ts_printf("recv thread exiting\n");
@@ -172,7 +171,7 @@ static void cmdr52_work_thread_proc(void *arg) {
     ts_printf("work thread started\n");
     while (1) {
         retCode = wait_event_interruptible(mgr->workwaitqueue, atomic_read(&mgr->refcount) > 0);
-        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, retCode);
+//        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, retCode);
         if (retCode == pdFALSE) {
             ts_printf("cmd work: %s: signaled!!!\n", __func__);
             break;
@@ -187,7 +186,10 @@ static void cmdr52_work_thread_proc(void *arg) {
             (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
             cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32);
         code = cmdr52_mgr_proc_cmdMsg(cmdMsg);
-        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
+        if (code != CMD_ERR_SUCCESS) {
+            ts_printf("cmdr52_mgr_proc_cmdMsg:%d\n", code);
+        }
+//        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
         cmdr52_mgr_release_cmdMsg(cmdMsg);
         atomic_dec(&mgr->refcount);
     }
@@ -239,7 +241,7 @@ static void cmdr52_wait_thread_func(void *arg) {
             ts_printf("%s:%s:%d return code:%d\n", __FILE__, __func__, __LINE__, retCode);
             continue;
         }
-        ts_printf("%s:%s:%d cmdbuf_id:%d\n", __FILE__, __func__, __LINE__, cmdbuf_id);
+//        ts_printf("%s:%s:%d cmdbuf_id:%d\n", __FILE__, __func__, __LINE__, cmdbuf_id);
         obj = &vcmd_mgr->objs[cmdbuf_id];
         session = obj->session;
         cmdMsg = cmdr52_mgr_dequeue_cmdMsg();

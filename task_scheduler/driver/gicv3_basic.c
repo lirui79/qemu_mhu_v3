@@ -55,21 +55,34 @@ static uint32_t gic_max_rd = 0;
 void setGICAddr(void* dist, void* rdist)
 {
   uint32_t index = 0;
-
   gic_dist = (struct GICv3_dist_if*)dist;
   gic_rdist = (struct GICv3_rdist_if*)rdist;
   gic_addr_valid = 1;
+  gic_max_rd = 0;
 
-  // Now find the maximum RD ID that I can use
-  // This is used for range checking in later functions
-  while((gic_rdist[index].lpis.GICR_TYPER[0] & (1<<4)) == 0) // Keep incrementing until GICR_TYPER.Last reports no more RDs in block
+  /* 仿真模型Last bit不工作：最大RD数量根据GICD_TYPER CPU number字段，或者硬上限8 */
+  uint32_t max_possible_rd = 8;
+
+  for(index = 0; index < max_possible_rd; index++)
   {
-    index++;
-    if (index > 8) break;   // 防御:避免 VP 上 GICR_TYPER 读取异常导致越界死循环
+      uint32_t typer0 = gic_rdist[index].lpis.GICR_TYPER[0];
+      uint32_t typer1 = gic_rdist[index].lpis.GICR_TYPER[1];
+#ifdef DEBUG
+      printf("RD[%d] TYPER0=0x%08x TYPER1=0x%08x Last=%d\n",
+             index, typer0, typer1, !!(typer0 & (1U<<4)));
+#endif
+      gic_max_rd = index;
+      if( (typer0 & (1U << 4)) != 0 ) {
+          break;
+      }
+      // 检测无效RD：TYPER全0说明已经越界
+      if( (typer0 == 0) && (typer1 == 0) ){
+          break;
+      }
   }
-
-  gic_max_rd = index;
-
+#ifdef DEBUG
+  printf("detected max_rd = %u\n", gic_max_rd);
+#endif
   return;
 }
 
@@ -175,36 +188,55 @@ uint32_t enableGIC(void)
 
   // First set the ARE bits
   gic_dist->GICD_CTLR = (1 << 5) | (1 << 4);
-
+  __dsb();
   // The split here is because the register layout is different once ARE==1
 
   // Now set the rest of the options
   gic_dist->GICD_CTLR = 7 | (1 << 5) | (1 << 4);
+  __dsb();
   return 0;
 }
 
 // ------------------------------------------------------------
 // Redistributor Functions
 // ------------------------------------------------------------
-
-uint32_t getRedistID(uint32_t affinity)
+uint32_t getRedistID(uint32_t mpidr_aff)
 {
   uint32_t index = 0;
-
-  // Check that GIC pointers are valid
   if (gic_addr_valid==0)
     return 0xFFFFFFFF;
 
-  do
+#ifdef DEBUG
+  printf("getRedistID: raw mpidr_aff=0x%08x\n", mpidr_aff);
+#endif
+
+#if 1
+  // Cortex‑R52 适配：R核MPIDR简化，只使用Aff1/Aff0，GICR_TYPER[1]填充策略不同
+  // 根据你的仿真模型实际情况调整掩码；很多R52仿真 GICR_TYPER[1] = (mpidr_aff & 0x0000FF00U)
+  uint32_t aff_compare = mpidr_aff & 0x0000FF00U;
+#else
+  // original A‑core code
+  uint32_t aff_compare = mpidr_aff & 0xFFFFFF00U;
+#endif
+
+  for(index = 0; index <= gic_max_rd; index++)
   {
-    if (gic_rdist[index].lpis.GICR_TYPER[1] == affinity)
-       return index;
-
-    index++;
+      uint32_t typer1 = gic_rdist[index].lpis.GICR_TYPER[1];
+#ifdef DEBUG
+      printf("getRedistID: RD[%d] TYPER1=0x%08x, expect aff=0x%08x\n", index, typer1, aff_compare);
+#endif
+      if (typer1 == aff_compare)
+      {
+#ifdef DEBUG
+        printf("getRedistID: found RD=%u aff=0x%08x\n", index, typer1);
+#endif
+        return index;
+      }
   }
-  while(index <= gic_max_rd);
-
-  return 0xFFFFFFFF; // return -1 to signal not RD found
+#ifdef DEBUG
+  printf("WARNING: getRedistID fail aff=0x%08x, max_rd=%u\n", aff_compare, gic_max_rd);
+#endif
+  return 0xFFFFFFFF;
 }
 
 // ------------------------------------------------------------
@@ -221,14 +253,14 @@ uint32_t wakeUpRedist(uint32_t rd)
   tmp = gic_rdist[rd].lpis.GICR_WAKER;
   tmp = tmp & ~0x2;
   gic_rdist[rd].lpis.GICR_WAKER = tmp;
-
+  __dsb();
   // Poll ChildrenAsleep bit until Redistributor wakes
   do
   {
     tmp = gic_rdist[rd].lpis.GICR_WAKER;
   }
   while((tmp & 0x4) != 0);
-
+  __dsb();
   return 0;
 }
 
@@ -659,7 +691,7 @@ uint32_t clearIntActive(uint32_t ID, uint32_t rd)
   uint32_t bank;
   
   #ifdef DEBUG
-  printf("clearIntPending:: Clearing pending state of INTID %d on RD%d\n", ID, rd);
+  printf("clearIntActive:: Clearing state of INTID %d on RD%d\n", ID, rd);
   #endif
 
   // Check that GIC pointers are valid

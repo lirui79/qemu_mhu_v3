@@ -24,19 +24,17 @@ extern "C" {
 #endif
 
 
-#define MHU_R52_CLIENT0      0
-#define MHU_R52_CLIENT1      1
-#define MHU_MAX_CLIENTS      2
-
 /*
  * Send 128-byte data via Mailbox
  */
 int mhu_v3_send_data(uint32_t r52id, const u8 *data_ptr, uint32_t data_len);
 
+
+int mhu_v3_wait_event_interruptible(uint32_t r52id);
 /*
  * Recv 128-byte data via Mailbox
  */
-int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t *size);
+int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t size);
 
 
 #ifdef __cplusplus

@@ -187,22 +187,22 @@ static uint32_t cmd_check(cmdMsg_t *cmdMsg, cmdr52_session_t **session)
     return CMD_ERR_SUCCESS;
 RETURN_ERROR:
     {
-        cmdMsg_t *cmdMsg1 = cmdr52_mgr_dequeue_cmdMsg();
-        cmdEvtRepCmdError_Body_t *cmdBody1 = (cmdEvtRepCmdError_Body_t *)cmdMsg1->data;
-        cmdr52_session_t *session1 = cmdr52_mgr_get_session(0x00000000);
-        if (session1 == NULL) {
-           session1 = cmdr52_mgr_get_session(0x00010000);
+        cmdMsg_t *cmdSMsg = cmdr52_mgr_dequeue_cmdMsg();
+        cmdEvtRepCmdError_Body_t *cmdSBody = (cmdEvtRepCmdError_Body_t *)cmdSMsg->data;
+        cmdr52_session_t *cmd_session = cmdr52_mgr_get_session(0x00000000);
+        if (cmd_session == NULL) {
+           cmd_session = cmdr52_mgr_get_session(0x00010000);
         }
-        cmd_init(cmdMsg1);
-        cmdMsg1->cmdType    = CMD_EVT_REPORT_CMDERROR;
-        cmdMsg1->cmdSize    = CMD_MSG_MIN_SIZE + sizeof(cmdEvtRepCmdError_Body_t);
-        cmdBody1->code      = retCode;
-        cmdBody1->cmdType   = cmdMsg->cmdType;
-        cmdBody1->seqNum    = cmdMsg->seqNum;
-        cmdBody1->sessionID = cmdMsg->sessionID;
-        cmdBody1->procObj   = 0x0000000000000000;//cmdMsg->procObj;
-        cmdBody1->timeStamp = cmdMsg->timeStamp;
-        cmdr52_session_send(session1, cmdMsg1);
+        cmd_init(cmdSMsg);
+        cmdSMsg->cmdType    = CMD_EVT_REPORT_CMDERROR;
+        cmdSMsg->cmdSize    = CMD_MSG_MIN_SIZE + sizeof(cmdEvtRepCmdError_Body_t);
+        cmdSBody->code      = retCode;
+        cmdSBody->cmdType   = cmdMsg->cmdType;
+        cmdSBody->seqNum    = cmdMsg->seqNum;
+        cmdSBody->sessionID = cmdMsg->sessionID;
+        cmdSBody->procObj   = 0x0000000000000000;//cmdMsg->procObj;
+        cmdSBody->timeStamp = cmdMsg->timeStamp;
+        cmdr52_session_send(cmd_session, cmdSMsg);
     }
 
     return retCode;

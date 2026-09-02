@@ -50,8 +50,6 @@ typedef struct {
     uint32_t           usedsize; //
     cmda78_session_t   vtb[CMDA78_SESSION_MAX];// vcodec session table
 	spinlock_t         spinlock;
-    wait_queue_head_t  workwaitqueue;
-    atomic_t           refcount;
 } cmd_r52mgr_t;
 
 

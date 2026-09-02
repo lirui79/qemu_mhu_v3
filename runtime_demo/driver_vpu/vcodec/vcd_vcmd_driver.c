@@ -518,8 +518,10 @@ void vcd_proc_add_done_job(vcmd_mgr_t *vcmd_mgr, struct cmdbuf_obj *obj)
 	list = &po->job_done_list;
 
 	dev = &vcmd_mgr->dev_ctx[obj->core_id];
-	wake_up_interruptible_all(&dev->buff_empty_waitq);
 
+//	wake_up_interruptible_all(&dev->buff_empty_waitq);
+
+//	printk("vcd_proc_add_done_job po=%px  lock=%px\n", po, &po->job_lock);
 	spin_lock_irqsave(&po->job_lock, flags);
 
 	if (vcmd_mgr->po_jobs[id].data) {
@@ -1226,7 +1228,7 @@ static void dev_ctx_init(vcmd_mgr_t *vcmd_mgr)
 		spin_lock_init(&dev->abn_irq_lock);
 		dev->abort_waitq = &dev->abort_queue_vcmd;
 		init_waitqueue_head(dev->abort_waitq);
-		init_waitqueue_head(&dev->buff_empty_waitq);
+//		init_waitqueue_head(&dev->buff_empty_waitq);
 
 		dev->reg_mem_ba = vcmd_mgr->mem_regs.pa +
 							i * SLOT_SIZE_REGBUF - vcmd_mgr->pa_trans_offset;
@@ -1861,6 +1863,61 @@ static long wait_owner_done(vcmd_mgr_t *vcmd_mgr, struct proc_obj *po, void *own
 }
 
 
+#define IOCTL_CMD_STR_CASE(cmd) { case (cmd): return(#cmd); }
+
+static char *IoctlCmdStr(unsigned int cmd)
+{
+	switch (cmd) {
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOC_MC_CORES)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCGHWOFFSET)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCGHWIOSIZE)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOC_MC_OFFSETS)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOC_CLI)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOC_STI)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCS_DEC_PUSH_REG)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCS_DEC_PULL_REG)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCH_DEC_RESERVE)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCT_DEC_RELEASE)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCX_DEC_WAIT)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCG_CORE_WAIT)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOX_ASIC_ID)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCG_CORE_ID)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCS_DEC_WRITE_REG)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCS_DEC_READ_REG)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOX_ASIC_BUILD_ID)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCX_POLL)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOX_SUBSYS)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOCS_DEC_WRITE_APBFILTER_REG)
+		IOCTL_CMD_STR_CASE(HANTRODEC_DEBUG_STATUS)
+#ifdef SUPPORT_MMU
+		/* MMU */
+		IOCTL_CMD_STR_CASE(HANTRO_IOCS_MMU_MEM_MAP)
+		IOCTL_CMD_STR_CASE(HANTRO_IOCS_MMU_MEM_UNMAP)
+		IOCTL_CMD_STR_CASE(HANTRO_IOCS_MMU_FLUSH)
+		IOCTL_CMD_STR_CASE(HANTRO_IOCS_MMU_SWITCH_PAGETABLE)
+		IOCTL_CMD_STR_CASE(HANTRO_IOCS_MMU_SWITCH_PAGETABLE_BY_CMDBUF)
+#endif
+		/* VCMD */
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_GET_CMDBUF_PARAMETER)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_GET_CMDBUF_POOL_SIZE)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_SET_CMDBUF_POOL_BASE)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_GET_VCMD_PARAMETER)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_RESERVE_CMDBUF)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_LINK_RUN_CMDBUF)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_WAIT_CMDBUF)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_RELEASE_CMDBUF)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_POLLING_CMDBUF)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_DROP_OWNER)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_PUSH_SLICE_REG)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_ABORT_CMDBUF)
+		IOCTL_CMD_STR_CASE(HANTRO_VCMD_IOCH_WAIT_OWNER_DONE)
+		/* AXI FE / APB filter */
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOC_APBFILTER_CONFIG)
+		IOCTL_CMD_STR_CASE(HANTRODEC_IOC_AXIFE_CONFIG)
+	default :
+		return "Invalid ioctl cmd";
+	}
+}
 /*---------------------------------------------------------
  * Function name : hantrodec_ioctl
  * Description   : communication method to/from the user space
@@ -2245,7 +2302,7 @@ static long hantrovcmd_dec_ioctl(struct file *filp, unsigned int cmd, unsigned l
 	struct vcmd_priv_ctx *ctx = (struct vcmd_priv_ctx *)filp->private_data;
 	vcmd_mgr_t *vcmd_mgr = (vcmd_mgr_t *)ctx->vcmd_mgr;
 
-	_log_ioctl_cmd(cmd);
+	_log_ioctl_cmd(cmd);//	printk("ioctl cmd 0x%08x [ %s ]\n", cmd, IoctlCmdStr(cmd));
 	/*
 	 * extract the type and number bitfields, and don't encode
 	 * wrong cmds: return ENOTTY (inappropriate ioctl)
@@ -2646,6 +2703,7 @@ static int hantrovcmd_dec_open(struct inode *inode, struct file *filp) {
 		return -EINVAL;
 	}
 
+//	printk("hantrovcmd_dec_open po=%px\n", po);
 #ifdef MAILBOX_CLIENT
 	if (cmda78_gen_open_session(po, R52_CORE_MASK_VDEC) < 0) {
 		vcmd_klog(LOGLVL_ERROR, "Open session failed!\n");
@@ -2827,15 +2885,17 @@ int hantrodec_vcmd_init(vcx_priv_t *priv) {
 	priv->priv = vcmd_mgr;
 	vcmd_manager = vcmd_mgr;
 #ifdef MAILBOX_CLIENT
+/*
 	if (cmda78_gen_open_session(vcmd_mgr->init_po, R52_CORE_MASK_VDEC) < 0) {
 		vcmd_klog(LOGLVL_ERROR, "Open session failed!\n");
 		_vcmd_kthread_stop(vcmd_mgr);
 		goto err2;
 	}
 
-	read_main_module_all_registers(vcmd_mgr);
+	read_main_module_all_registers(vcmd_mgr);//*/
 #endif
 
+//    printk("%s:%s:%d recv\n", __FILE__, __func__, __LINE__);
 	return 0;
 err2:
     cdev_del(&priv->cdev);

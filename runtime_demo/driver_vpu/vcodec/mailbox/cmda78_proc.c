@@ -24,28 +24,8 @@ int32_t cmda78_send(cmdMsg_t *cmdMsg) {
     cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
 // mailbox_send(cmdMsg);//    retCode = mhu_send_data((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
     retCode = mhu_v3_send_data(r52ID, (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-
     return retCode;
 }
-
-
-int32_t    cmda78_thread_wakeup(uint32_t r52CoreID) {
-    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[r52CoreID]);
-    atomic_inc(&rmgr->refcount);
-    wake_up_interruptible(&rmgr->workwaitqueue);
-    return 0;
-}
-
-/* ISR 安全版本:mhu_mbx_isr 的 FF 分支在中断上下文调用 irq_callback_fifo,
- * 非 FromISR 版本里 xSemaphoreTake(portMAX_DELAY) 会触发
- * portASSERT_IF_IN_ISR(port.c:176 assert)。 */
-int32_t    cmda78_thread_wakeup_from_isr(uint32_t r52CoreID) {
-    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[r52CoreID]);
-    atomic_inc(&rmgr->refcount);
-    wake_up_interruptible(&rmgr->workwaitqueue);
-    return 0;
-}
-
 
 static int32_t cmda78_work_thread_proc(void *arg) {
     cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
@@ -55,7 +35,7 @@ static int32_t cmda78_work_thread_proc(void *arg) {
     printk("work thread started\n");
     while (!kthread_should_stop()) {
         if (wait_event_interruptible(mgr->workwaitqueue, atomic_read(&mgr->refcount) > 0)) {
-            pr_err("cmd work: %s: signaled!!!\n", __func__);
+            printk("wait_event_interruptible: signal %s\n", __func__);
             break;
         }
 
@@ -64,9 +44,10 @@ static int32_t cmda78_work_thread_proc(void *arg) {
             continue;
         }
         retCode = cmda78_proc_cmdMsg(cmdMsg);
-        cmda78_release_cmdMsg(cmdMsg);
         atomic_dec(&mgr->refcount);
-        printk("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, retCode);
+        if (retCode != CMD_ERR_SUCCESS) {
+            printk("cmda78_proc_cmdMsg:%d\n", retCode);
+        }
     }
 
     printk("work thread exiting\n");
@@ -79,27 +60,25 @@ uint32_t crc32_calc(const uint8_t *buffer, size_t bufferLength) {
    return crc32_le(~0, buffer, bufferLength) ^ ~0;
 }
 
-
 static int cmda78_thread_func(void *arg) {
     cmd_r52mgr_t *rmgr = (cmd_r52mgr_t *)arg;
     cmda78_mgr_t *mgr = (cmda78_mgr_t*) cmda78_get_mgr();
     cmdMsg_t *cmdMsg = NULL;
     int32_t code = 0;
-
     printk("recv thread started\n");
 
     while (!kthread_should_stop()) {
-        if (wait_event_interruptible(rmgr->workwaitqueue, atomic_read(&rmgr->refcount) > 0)) {
-            pr_err("cmd work: %s: signaled!!!\n", __func__);
-            break;
+        code = mhu_v3_wait_event_interruptible(rmgr->r52coreid);
+        if (code < 0) {
+            printk("mhu_v3_wait_event_interruptible:%d\n", code);
+            continue;
         }
 
         cmdMsg = cmda78_dequeue_cmdMsg();
-        cmdMsg->cmdSize = CMD_MSG_MAX_SIZE;
 // mailbox_recv(cmdMsg);//
-        code = mhu_v3_recv_data(rmgr->r52coreid, (uint8_t *)cmdMsg, &cmdMsg->cmdSize);
-        printk("%s:%s:%d recv\n", __FILE__, __func__, __LINE__);
+        code = mhu_v3_recv_data(rmgr->r52coreid, (uint8_t *)cmdMsg, CMD_MSG_MAX_SIZE);
         if (code != 0) {
+            printk("mhu_v3_recv_data:%d\n", code);
             cmda78_cancel_cmdMsg(cmdMsg);
             continue;
         }
@@ -114,14 +93,7 @@ static int cmda78_thread_func(void *arg) {
 
 int32_t  cmda78_thread_create(void* arg) {
     cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
-    cmd_r52mgr_t *rmgr = &mgr->rtb[0];
-    atomic_set(&mgr->refcount, 0);
-    init_waitqueue_head(&mgr->workwaitqueue);
-    atomic_set(&rmgr->refcount, 0);
-    init_waitqueue_head(&rmgr->workwaitqueue);
-    rmgr = &mgr->rtb[1];
-    atomic_set(&rmgr->refcount, 0);
-    init_waitqueue_head(&rmgr->workwaitqueue);
+
     // 创建并启动内核线程，将 dev 作为参数传入
     mgr->recv_thread[0] = kthread_run(cmda78_thread_func, &mgr->rtb[0], "recv_thread0");
     if (IS_ERR(mgr->recv_thread[0])) {

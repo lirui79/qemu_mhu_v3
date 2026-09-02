@@ -426,7 +426,7 @@ struct hantrovcmd_dev {
 	/* for slice decoding, the wait queue is used to wait buffer empty
 	 * interrupt in pm suspend process.
 	 */
-	wait_queue_head_t buff_empty_waitq; // buffer empty wait queue
+//	wait_queue_head_t buff_empty_waitq; // buffer empty wait queue
 #ifdef SUPPORT_DBGFS
 	void *dbgfs_info;
 #endif

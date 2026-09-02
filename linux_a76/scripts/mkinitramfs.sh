@@ -81,8 +81,10 @@ chmod 0666 "${root}/bin/tb.cfg"
 
 cp  "${BS_DIR}/akiyo_352x288_300_IBBBP.h264" "${root}/home/"
 cp  "${BS_DIR}/sample_640x360.hevc" "${root}/home/"
+cp  "${YUV_DIR}/akiyo_352x288_10.yuv" "${root}/home/"
 chmod 0666 "${root}/home/akiyo_352x288_300_IBBBP.h264"
 chmod 0666 "${root}/home/sample_640x360.hevc"
+chmod 0666 "${root}/home/akiyo_352x288_10.yuv"
 
 
 if [[ "${autorun}" == "1" || "${autorun}" == "y" || "${autorun}" == "yes" ]]; then

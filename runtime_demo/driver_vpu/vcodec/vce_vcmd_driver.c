@@ -973,6 +973,12 @@ static long link_and_run_cmdbuf(vcmd_mgr_t *vcmd_mgr, struct proc_obj *po,
 	cmd_param.core_id = param->core_id;
 #ifdef MAILBOX_CLIENT
 	retCode = cmda78_gen_run_cmdbuf(po, &cmd_param);
+	if (retCode == CMD_ERR_SUCCESS) {
+		/* R52 firmware stubs VCE execution (VCMD_ALLOC_MEM not defined).
+		 * Write FRAME_READY status so EWLWaitCmdbuf sees a valid status
+		 * instead of an all-zero buffer after the mailbox round-trip. */
+		obj->status_va[1] = ASIC_STATUS_FRAME_READY;
+	}
 #else
 	retCode = 0;//	printk("%s %s %d:obj->core_id:%d\n", __FILE__, __func__, __LINE__, obj->core_id);
 	obj->core_id = 0;
@@ -2283,17 +2289,30 @@ static int hantrovcmd_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
-	// support only uncached mode
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	// DMA-coherent memory: use Normal Non-cacheable (WriteCombine) not
+	// Device-nGnRnE.  pgprot_noncached causes BUS_ADRALN on ARM64 when
+	// the encoder writes 64-bit values at 4-byte-aligned offsets because
+	// Device memory forbids unaligned access.
+	// vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 
 	vma->vm_ops = &hantrovcmd_vm_ops;
-
+	ret = io_remap_pfn_range(vma,
+			vma->vm_start,
+			vma->vm_pgoff,
+			size,
+			vma->vm_page_prot);
+	if (ret != 0) {
+		pr_err("io_remap_pfn_range failed ret=%d\n", ret);
+		return ret;
+	}
+/*
 	ret = remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff, size,
 		  vma->vm_page_prot);
 	if (ret != 0) {
 		vcmd_klog(LOGLVL_ERROR, "remap_pfn_range() failed.\n");
 		goto err_out;
-	}
+	}//*/
 
 	return 0;
 
@@ -2422,15 +2441,16 @@ int hantroenc_vcmd_init(vcx_priv_t *priv)
 	priv->priv = (void *)vcmd_mgr;
 	vcmd_manager->priv = priv;
 #ifdef MAILBOX_CLIENT
+/*
 	if (cmda78_gen_open_session(vcmd_mgr->init_po, R52_CORE_MASK_VENC) < 0) {
 		vcmd_klog(LOGLVL_ERROR, "Open session failed!\n");
 		_vcmd_kthread_stop(vcmd_mgr);
 		goto err;
 	}
-	read_main_module_all_registers(vcmd_mgr);
+	read_main_module_all_registers(vcmd_mgr);//*/
 #endif
 
-
+//    printk("%s:%s:%d recv\n", __FILE__, __func__, __LINE__);
 	return 0;
 
 err:

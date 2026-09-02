@@ -35,6 +35,10 @@ typedef enum {
 
 #define MHU_DATA_SIZE      128
 #define TX_TIMEOUT_MS      1000
+#define R52_MAX_CORE       2
+#define MHU_MAX_DBCW       4
+#define MHU_MAX_FFCH       4
+#define MHU_MAX_FACH       32
 
 
 struct mhu_v3_manager {
@@ -46,26 +50,40 @@ struct mhu_v3_manager {
 	resource_size_t      pbx_size;
 	resource_size_t      mbx_size;
 	int                  rx_irq;
-	spinlock_t           rlock[MHU_MAX_CLIENTS];
-	spinlock_t           wlock[MHU_MAX_CLIENTS];
-	struct completion    fifo_completion;
-	wait_queue_head_t    waitq;
 
-	atomic64_t           submitted;
-	atomic64_t           completed;
+	spinlock_t           rlock[R52_MAX_CORE];
+	spinlock_t           wlock[R52_MAX_CORE];
+	wait_queue_head_t    dbwait[MHU_MAX_DBCW];
+	wait_queue_head_t    fcwait[MHU_MAX_FACH];
+	wait_queue_head_t    ffwait[MHU_MAX_FFCH];
+
+	atomic64_t           ffcompleted[MHU_MAX_FFCH];
 
     uint32_t             g_mbx_fc_data_0[32];  // fast channel data buffer
 };
 
 static struct mhu_v3_manager  g_mhu_v3_mgr;
 
+
+
+int mhu_v3_wait_event_interruptible(uint32_t r52id) {
+    struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
+    uint32_t ch = 2 * r52id + 1;
+    if (wait_event_interruptible(mgr->ffwait[ch], atomic64_read(&mgr->ffcompleted[ch]) > 0)) {
+        printk("mhu_v3_wait_event_interruptible: signal %s\n", __func__);
+        return -1;
+    }
+
+    return 0;
+}
+
 /*
  * Recv 128-byte data via Mailbox
  */
-int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t *size) {
+int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t size) {
     uint32_t ch = 2 * r52id + 1;
     struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
-    uint32_t *dwptr = (uint32_t*)data, buf_len = *size;
+    uint32_t *dwptr = (uint32_t*)data, buf_len = size;
     uint32_t  dwlen = (buf_len / 4);
     uint32_t  fill, val, len = 0, i = 0,st;
     uint32_t  flags, stale;
@@ -89,7 +107,7 @@ int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t *size) {
         } while (!fill);
 
         /* pop data and flag from fifo */
- 	    spin_lock(&mgr->rlock[r52id]);
+	    spin_lock(&mgr->rlock[r52id]);
         val   = mhu_fifo_pop32(mgr->mbx, ch);
         flags = mhu_read32(mgr->mbx + MHU_MBX_FFCW_FLG(ch));
         stale = mhu_read32(mgr->mbx + MHU_MBX_FFCW_CTRL(ch));
@@ -146,11 +164,9 @@ int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t *size) {
         mhu_write32(mgr->mbx + MHU_MBX_FFCW_INT_EN(ch), 0xFFFFFFFF);
     }
 	spin_unlock(&mgr->rlock[r52id]);
-    *size = len * 4;
-    printk("MHU V3: Received and copied 128 bytes of data.\n");
-    
+//    printk("MHU V3: Received and copied %d bytes of data.\n", *size);
+    atomic64_dec(&mgr->ffcompleted[i]);
     return 0;
-
 }
 
 /*
@@ -216,13 +232,13 @@ static irqreturn_t mhu_irq_handler(int irq, void *data)
 
     if (db_int != 0) {
         ret = IRQ_HANDLED;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < MHU_MAX_DBCW; i++) {
             if (db_int & (1 << i)) {
                 status = mhu_receiver_status(mgr->mbx, i);
                 if (status) {
                     mhu_receiver_clear_irq(mgr->mbx, i, status);
-                    atomic64_inc(&mgr->completed);
-                    wake_up_interruptible(&mgr->waitq);
+                    //atomic64_inc(&mgr->completed);
+                    wake_up_interruptible(&mgr->dbwait[i]);
                 }
             }
         }
@@ -230,22 +246,21 @@ static irqreturn_t mhu_irq_handler(int irq, void *data)
     }
     if (fc_int != 0) {
         ret = IRQ_HANDLED;
-        for (i = 0; i < 32; i++) {
+        for (i = 0; i < MHU_MAX_FACH; i++) {
             if (fc_int & (1 << i)) {
                 mgr->g_mbx_fc_data_0[i] = mhu_read32(mgr->mbx + MHU_MBX_FCH_PAY32(i));
                 /* write 0 to clear FC interrupt latch in hardware,
                  * otherwise subsequent FC notifications won't
                  * generate a new combo-interrupt edge */
                 mhu_write32(mgr->mbx + MHU_MBX_FCH_PAY32(i), 0);
+                wake_up_interruptible(&mgr->fcwait[i]);
             }
         }
-
-        complete_all(&mgr->fifo_completion);
     }
 
     if (ff_int != 0) {
         ret = IRQ_HANDLED;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < MHU_MAX_FFCH; i++) {
             if (ff_int & (1 << i)) {
                 uint32_t ff_int_st = mhu_read32(mgr->mbx + MHU_MBX_FFCW_INT_ST(i));
                 /* FIFO 中断是电平触发(fill>0 条件持续),仅写 INT_CLR
@@ -254,33 +269,33 @@ static irqreturn_t mhu_irq_handler(int irq, void *data)
                  * 排空 FIFO 后再重新使能。 */
                 mhu_write32(mgr->mbx  + MHU_MBX_FFCW_INT_EN(i), 0);
                 mhu_fifo_clear_rx_irq(mgr->mbx , i, ff_int_st);
+                atomic64_inc(&mgr->ffcompleted[i]);
+                wake_up_interruptible(&mgr->ffwait[i]);
             }
         }
-
-        complete_all(&mgr->fifo_completion);
     }
 
-    printk("MBX_INT: db=0x%x fc=0x%x ff=0x%x\n", db_int, fc_int, ff_int);
+//    printk("MBX_INT: db=0x%x fc=0x%x ff=0x%x\n", db_int, fc_int, ff_int);
 	return ret;
 }
 
 static int mhu_init(struct platform_device *pdev, struct mhu_v3_manager *mgr)
 {
-   uint32_t i, dbch, ffch, fch, iidr;
+   uint32_t i, dbch, ffch, fach, iidr;
    int ret;
 
     dbch = (mhu_read32(mgr->mbx + MHU_MBX_DBCH_CFG0) & 0xFF) + 1; //num of doorbell channel
     ffch = (mhu_read32(mgr->mbx + MHU_MBX_FFCH_CFG0) & 0xFF) + 1; //num of fifo channel
-    fch  = (mhu_read32(mgr->mbx + MHU_MBX_FCH_CFG0) & 0x3FF) + 1; //num of fast channel num
+    fach = (mhu_read32(mgr->mbx + MHU_MBX_FCH_CFG0) & 0x3FF) + 1; //num of fast channel num
     iidr =  mhu_read32(mgr->mbx + MHU_MBX_IIDR);
-    printk("MHU: dbch=%u ffch=%u fch=%u iidr=0x%x\n", dbch, ffch, fch, iidr);
+    printk("MHU: dbch=%u ffch=%u fach=%u iidr=0x%x\n", dbch, ffch, fach, iidr);
 
        /* Enable MBX doorbell channel interrupt */
     mhu_write32(mgr->mbx + MHU_MBX_DBCH_CTRL,   0x4);      //INT_EN
     mhu_write32(mgr->mbx + MHU_MBX_DBG_INT_EN,  0x1);      //DB group 0
 
     /* Clear stale FC interrupts, then enable */
-    for (i = 0; i < fch && i < 32; i++) {
+    for (i = 0; i < fach; i++) {
         mhu_write32(mgr->mbx + MHU_MBX_FCH_PAY32(i), 0);
     }
     mhu_write32(mgr->mbx + MHU_MBX_FCH_CTRL,   0x4);      //INT_EN
@@ -363,15 +378,24 @@ int mhu_v3_client_probe(struct platform_device *pdev) {
 		return mgr->rx_irq;
     }
 
-    for (i = 0; i < MHU_MAX_CLIENTS; i++) {
+    for (i = 0; i < R52_MAX_CORE; i++) {
         spin_lock_init(&mgr->rlock[i]);
         spin_lock_init(&mgr->wlock[i]);
     }
 
-	init_completion(&mgr->fifo_completion);
-	init_waitqueue_head(&mgr->waitq);
-	atomic64_set(&mgr->submitted, 0);
-	atomic64_set(&mgr->completed, 0);
+    for (i = 0; i < MHU_MAX_DBCW; i++) {
+        init_waitqueue_head(&mgr->dbwait[i]);
+    }
+
+    for (i = 0; i < MHU_MAX_FACH; i++) {
+        init_waitqueue_head(&mgr->fcwait[i]);
+    }
+
+    for (i = 0; i < MHU_MAX_FFCH; i++) {
+        init_waitqueue_head(&mgr->ffwait[i]);
+	    atomic64_set(&mgr->ffcompleted[i], 0);
+    }
+
 //	printk("%s %s %d:\n", __FILE__, __func__, __LINE__);
     ret = mhu_init(pdev, mgr);
     printk("MHU V3 Client probed %d successfully\n", ret);

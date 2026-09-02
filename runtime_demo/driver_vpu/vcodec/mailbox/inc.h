@@ -17,7 +17,7 @@
 #ifndef _COMMAND_INCLUDE_H_
 #define _COMMAND_INCLUDE_H_
 
-//#define  MAILBOX_CLIENT
+#define  MAILBOX_CLIENT
 //#define  VCMD_ALLOC_MEM
 
 

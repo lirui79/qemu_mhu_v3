@@ -37,7 +37,8 @@ typedef struct {
     struct rb_node         node;
     wait_queue_head_t      wait;
     struct kref            refcount;
-    uint8_t                cmdMsg[CMD_MSG_MAX_SIZE];
+//    uint8_t                cmdMsg[CMD_MSG_MAX_SIZE];
+    cmdMsg_t              *cmdMsg;
 } cmdnode_t;
 
 cmdnode_t*    cmdnode_alloc(uint32_t ackNum, uint32_t sessionID, uint64_t timeStamp, struct proc_obj *proc);

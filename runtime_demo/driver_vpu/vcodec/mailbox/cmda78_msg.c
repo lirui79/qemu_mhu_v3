@@ -34,14 +34,17 @@ static int32_t cmda78_send_wait_event(cmda78_session_t* session, struct proc_obj
     int32_t errCode = CMD_ERR_SUCCESS;
     long retCode = 0;
 
-    retCode = cmda78_session_send(session, cmdMsg);
     spin_lock(&session->spinlock);
+    retCode = cmda78_session_send(session, cmdMsg);
+//    spin_unlock(&session->spinlock);
     cnode   = cmdnode_alloc(cmdMsg->seqNum, cmdMsg->sessionID, cmdMsg->timeStamp, proc);
+//    spin_lock(&session->spinlock);
     cmdnode_insert(&session->cmdroot, cnode);
     spin_unlock(&session->spinlock);
 
     retCode = wait_event_interruptible_timeout(cnode->wait, (cnode->code != CMD_ERR_UNKNOWN),	msecs_to_jiffies(timeout));
-    memcpy((int8_t*)cmdMsg, (int8_t*)cnode->cmdMsg, CMD_MSG_MAX_SIZE);
+    memcpy((int8_t*)cmdMsg, (int8_t*)cnode->cmdMsg, cnode->cmdMsg->cmdSize);
+    cmda78_release_cmdMsg(cnode->cmdMsg);
 
     spin_lock(&session->spinlock);
     errCode = cnode->code;
@@ -82,10 +85,8 @@ int32_t    cmda78_gen_open_session(struct proc_obj *proc, uint32_t coremask) {
 
     printk("++++++++++++%s:%s:%d %d %x++++++++++++\n", __FILE__, __func__, __LINE__, retCode, session->sessionID);
     cmda78_release_cmdMsg(cmdMsg);
-
     return retCode;
 }
-
 
 int32_t    cmda78_gen_close_session(struct proc_obj *proc, uint32_t coremask) {
     cmdMsg_t *cmdMsg = cmda78_dequeue_cmdMsg();
@@ -109,10 +110,8 @@ int32_t    cmda78_gen_close_session(struct proc_obj *proc, uint32_t coremask) {
 
     retCode = cmda78_send_wait_event(session, proc, cmdMsg, 5000);
 
-
     printk("----------%s:%s:%d %d %x-----------\n", __FILE__, __func__, __LINE__, retCode, session->sessionID);
     cmda78_release_cmdMsg(cmdMsg);
-
     return retCode;
 }
 
@@ -152,7 +151,6 @@ int32_t    cmda78_gen_run_cmdbuf(struct proc_obj *proc, struct exchange_cmda78_p
         }
     }
     cmda78_release_cmdMsg(cmdMsg);
-
     return retCode;
 }
 
@@ -183,7 +181,6 @@ int32_t    cmda78_gen_ctrl_cmdbuf(struct proc_obj *proc, uint32_t vcmdmgr_id, ui
         }
     }
     cmda78_release_cmdMsg(cmdMsg);
-
     return retCode;
 }
 
@@ -215,6 +212,5 @@ int32_t    cmda78_gen_drop_owner(struct proc_obj *proc, uint64_t ownerID, uint32
         }
     }
     cmda78_release_cmdMsg(cmdMsg);
-
     return cmdbuf_num;
 }

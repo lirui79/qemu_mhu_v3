@@ -37,14 +37,15 @@ static int               _cmda78_init_mgr(cmda78_mgr_t *mgr) {
         rmgr->vtb_size  = CMDA78_SESSION_MAX; // session number per r52 core
         rmgr->usedsize  = 0; // current used session number
         spin_lock_init(&rmgr->spinlock);
-        atomic_set(&rmgr->refcount, 0);
-        init_waitqueue_head(&rmgr->workwaitqueue);
     // 创建并启动内核线程，将 dev 作为参数传入
         for (j = 0 ; j < CMDA78_SESSION_MAX; ++j) {
             uint32_t sessionID = ((rmgr->r52coreid << 16) & 0xFFFF0000) | j;
             cmda78_session_init(&rmgr->vtb[j], NULL, sessionID);
         }
     }
+
+    atomic_set(&mgr->refcount, 0);
+    init_waitqueue_head(&mgr->workwaitqueue);
 
     for (i = 0; i < VCMD_MGR_ID_MAX; ++i) {
         mgr->mtb[i] = NULL;
@@ -193,6 +194,18 @@ int32_t           cmda78_cancel_cmdMsg(cmdMsg_t* cmdMsg) {
     return   BQueueCancel(cmda78_get_mgr()->cmd_queue, cmdMsg);
 }
 
+void print_byte_array(const char *label, const uint8_t *arr, size_t len) {
+    char buf[512] = {0};
+    int32_t pos = 0;
+    printk("%s (Length: %zu):\n", label, len);
+    printk("  Hex: ");
+    for (size_t i = 0; i < len; i++) {
+        pos += sprintf(buf + pos, "%02X", arr[i]);
+    }
+    printk("%s", buf);
+    printk("\n");
+}
+
 static uint32_t cmda78_check(cmdMsg_t *cmdMsg, cmda78_session_t **session)
 {
     uint32_t crc32 = 0, crc32Now = 0, retCode = CMD_ERR_SUCCESS;
@@ -222,6 +235,10 @@ static uint32_t cmda78_check(cmdMsg_t *cmdMsg, cmda78_session_t **session)
     cmdMsg->crc32 = crc32;
     if (crc32 != crc32Now) {
         retCode = CMD_ERR_INVALID_CHECKSUM;
+        printk("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc32=%x rc32Now:%x\n", \
+            (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
+            cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32, crc32Now);
+        print_byte_array("cmdMsg", (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
         goto RETURN_ERROR;
     }
 
@@ -239,12 +256,16 @@ RETURN_ERROR:
 
 int32_t cmda78_proc_cmdMsg(cmdMsg_t *cmdMsg) {
     cmda78_session_t *session = NULL;
+    uint32_t retCode = CMD_ERR_SUCCESS;
 
-    if (cmda78_check(cmdMsg, &session) != CMD_ERR_SUCCESS) {
-        return CMD_ERR_INVALID_PARAM;
+    retCode = cmda78_check(cmdMsg, &session);
+    if (retCode != CMD_ERR_SUCCESS) {
+        cmda78_release_cmdMsg(cmdMsg);
+        return retCode;
     }
 
     if (cmda78_session_check(session, cmdMsg) < 0) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_SEQUENCEID;
     }
 

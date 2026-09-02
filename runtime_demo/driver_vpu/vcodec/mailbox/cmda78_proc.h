@@ -34,10 +34,6 @@ int32_t    cmda78_thread_create(void* arg);
 
 int32_t    cmda78_thread_stop(void* arg);
 
-int32_t    cmda78_thread_wakeup(uint32_t r52CoreID);
-
-int32_t    cmda78_thread_wakeup_from_isr(uint32_t r52CoreID);
-
 
 #ifdef __cplusplus
 }

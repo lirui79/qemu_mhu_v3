@@ -285,13 +285,21 @@ static int memalloc_release(struct inode *inode, struct file *filp)
 {
 	int i = 0;
 	spin_lock(&mem_lock);
-	for (i = 0; i < chunks; i++) {
-		if (hlina_chunks[i].filp == filp) {
-			pr_warn("memalloc: Found unfreed memory at release time!\n");
-
+	if (!hlina_chunks) {
+		spin_unlock(&mem_lock);
+		return 0;
+	}
+	while (i < chunks) {
+		if (hlina_chunks[i].chunks_reserved != 0 && hlina_chunks[i].filp == filp) {
+			pr_warn("memalloc: unfreed buf bus=0x%llx chunks=%u\n",
+				hlina_chunks[i].bus_address, hlina_chunks[i].chunks_reserved);
 			hlina_chunks[i].filp = NULL;
 			hlina_chunks[i].chunks_reserved = 0;
 		}
+		if (hlina_chunks[i].chunks_reserved > 0)
+			i += hlina_chunks[i].chunks_reserved;
+		else
+			i++;
 	}
 	spin_unlock(&mem_lock);
 	PDEBUG("dev closed\n");
@@ -334,21 +342,30 @@ static const struct vm_operations_struct memlloc_vm_ops = {
 static int get_of_mem(void)
 {
 	struct resource res;
-	struct device_node *np;
+	struct device_node *np, *mem_np;
 	int ret;
 
 	np = of_find_compatible_node(NULL, NULL, VCD_DTB_NODE_NAME);
-	np = of_parse_phandle(np, "memory-region", 0);
-	ret = of_address_to_resource(np, 0, &res);
+	if (!np) {
+		pr_err("can't find vcd dtb node\n");
+		return -EINVAL;
+	}
+	mem_np = of_parse_phandle(np, "memory-region", 0);
+	of_node_put(np);
+	if (!mem_np) {
+		pr_err("memory‑region phandle is NULL\n");
+		return -EINVAL;
+	}
+	ret = of_address_to_resource(mem_np, 0, &res);
+	of_node_put(mem_np);
 	if (ret) {
-		pr_err("can't get reserved memory-region from DTB. ret=%d,\n", ret);
+		pr_err("can't get reserved memory‑region from DTB. ret=%d\n", ret);
 		return -EINVAL;
 	}
 	alloc_base = res.start;
-	alloc_size = (res.end - res.start + 1) >> 20; // in MBs
-	pr_info("get reserved memory-region: base address 0x%lx, size %ld MB\n",
+	alloc_size = (res.end - res.start + 1) >> 20;
+	pr_info("get reserved memory‑region: base address 0x%lx, size %ld MB\n",
 		alloc_base, alloc_size);
-
 	return 0;
 }
 #endif
@@ -363,61 +380,46 @@ static int get_of_mem(void)
  */
 static int PcieInit(void)
 {
-	gDev = pci_get_device(PCI_VENDOR_ID_HANTRO,
-			      PCI_DEVICE_ID_HANTRO_PCI, gDev);
+	gDev = pci_get_device(PCI_VENDOR_ID_HANTRO, PCI_DEVICE_ID_HANTRO_PCI, gDev);
 	if (!gDev) {
 		pr_info("%s: Hardware not found.\n", __func__);
 		goto out;
 	}
-
 	if (pci_enable_device(gDev) < 0) {
 		pr_info("%s Device not enabled.\n", __func__);
 		goto out;
 	}
-
 	gBaseHdwr = pci_resource_start(gDev, PCI_DDR_BAR);
 	if (gBaseHdwr == 0) {
 		pr_info("Init: Base Address not set.\n");
 		goto out_pci_disable_device;
 	}
 	pr_info("Base hw val 0x%X\n", (unsigned int)gBaseHdwr);
-
 	gBaseLen = pci_resource_len(gDev, PCI_DDR_BAR);
 	pr_info("Base hw len 0x%x\n", (unsigned int)gBaseLen);
-
-	/* Reserve 8MB for memeory allocator table. */
-	#ifdef EMU
-		// EMU available memeory: ddr base + 0x4000000
-		alloc_base = gBaseHdwr + mem_alloc_table_size + 0x4000000 + vcmd_size + ddr_offset;
-	#else
-		alloc_base = gBaseHdwr + mem_alloc_table_size + vcmd_size + ddr_offset;
-	#endif
+#ifdef EMU
+	alloc_base = gBaseHdwr + mem_alloc_table_size + 0x4000000 + vcmd_size + ddr_offset;
+#else
+	alloc_base = gBaseHdwr + mem_alloc_table_size + vcmd_size + ddr_offset;
+#endif
 	addr_transl = gBaseHdwr;
 	alloc_size = ddr_size - mem_alloc_table_size / 0x100000 - vcmd_size / 0x100000;
-	//alloc_base2= alloc_base+alloc_size*0x100000+0x100000;
 	return 0;
-
-
-	//out_iounmap:
-	//      iounmap((void *) gBaseVirt);
 out_pci_disable_device:
 	pci_disable_device(gDev);
 out:
 	return -1;
-
 }
 #endif
 
 static int __init memalloc_init(void)
 {
 	int result, ret;
-
 #ifdef DTB_SUPPORT
 	result = get_of_mem();
 	if (result < 0)
 		goto err;
 #endif
-
 	pr_info("module init\n");
 #ifdef PCIE_EN
 	result = PcieInit();
@@ -426,67 +428,54 @@ static int __init memalloc_init(void)
 #endif
 	pr_info("memalloc: Linear Memory Allocator\n");
 	pr_info("memalloc: Linear memory base = 0x%08lx\n", alloc_base);
-
 	chunks = (alloc_size * 1024 * 1024) / CHUNK_SIZE;
-
-	pr_info("memalloc: Total size %ld MB; %d chunks of size %lu\n",
-		alloc_size, (int)chunks, CHUNK_SIZE);
-
+	pr_info("memalloc: Total size %ld MB; %zu chunks of size %lu\n",
+		alloc_size, chunks, CHUNK_SIZE);
 	hlina_chunks = vmalloc(chunks * sizeof(hlina_chunk));
 	if (!hlina_chunks) {
-		//pr_err("memalloc: cannot allocate hlina_chunks\n");
 		result = -ENOMEM;
 		goto err;
 	}
-    // 1. 创建类
-    mem_class = class_create(CLASS_NAME);
-    if (IS_ERR(mem_class)) {
-        pr_info("Failed to create class\n");
+	mem_class = class_create(CLASS_NAME);
+	if (IS_ERR(mem_class)) {
+		pr_info("Failed to create class\n");
 		result = -ENOMEM;
 		goto err;
-    }
-    // 2. 动态分配一组设备号 (主设备号自动分配，次设备号预留 0~2)
-    ret = alloc_chrdev_region(&base_dev_no, 0, DEVICE_COUNT, MEM_DRIVER_NAME);
-    if (ret < 0) {
-        pr_err("Failed to allocate chrdev region\n");
+	}
+	ret = alloc_chrdev_region(&base_dev_no, 0, DEVICE_COUNT, MEM_DRIVER_NAME);
+	if (ret < 0) {
+		pr_err("Failed to allocate chrdev region\n");
 		result = -ENOMEM;
-        goto err_class;
-    }
-    memalloc_major = MAJOR(base_dev_no);
-    pr_info("Allocated Major Number: %d\n", memalloc_major);
-
-	// 2. 计算设备号: 主设备号相同，次设备号 = id
-    devno = MKDEV(memalloc_major, 0);
-    // 3. 初始化并添加 cdev
-    cdev_init(&cdev, &memalloc_fops);
-    cdev.owner = THIS_MODULE;
-    ret = cdev_add(&cdev, devno, 1);
-    if (ret) {
-        pr_err("Failed to add cdev\n");
+		goto err_class;
+	}
+	memalloc_major = MAJOR(base_dev_no);
+	pr_info("Allocated Major Number: %d\n", memalloc_major);
+	devno = MKDEV(memalloc_major, 0);
+	cdev_init(&cdev, &memalloc_fops);
+	cdev.owner = THIS_MODULE;
+	ret = cdev_add(&cdev, devno, 1);
+	if (ret) {
+		pr_err("Failed to add cdev\n");
 		result = -ENOMEM;
-        goto err_chrdev;
-    }
-    // 4. 创建设备节点 /dev/ 下
-    // 这会在 /sys/class/hantroclass/ 下创建条目，并触发 udev 创建 /dev 节点
-    dev = device_create(mem_class, NULL, devno, NULL, "%s", MEM_DRIVER_NAME);
-    if (IS_ERR(dev)) {
-        cdev_del(&cdev);
-        pr_err("Failed to create device node for name %s\n", MEM_DRIVER_NAME);
+		goto err_chrdev;
+	}
+	dev = device_create(mem_class, NULL, devno, NULL, "%s", MEM_DRIVER_NAME);
+	if (IS_ERR(dev)) {
+		cdev_del(&cdev);
+		pr_err("Failed to create device node for name %s\n", MEM_DRIVER_NAME);
 		result = -ENOMEM;
-        goto err_chrdev;
-    }
+		goto err_chrdev;
+	}
 	ResetMems();
-
 	return 0;
-err_chrdev:
-    unregister_chrdev_region(base_dev_no, DEVICE_COUNT);
-err_class:
-    class_destroy(mem_class);
 
+err_chrdev:
+	unregister_chrdev_region(base_dev_no, DEVICE_COUNT);
+err_class:
+	class_destroy(mem_class);
 err:
 	if (hlina_chunks)
 		vfree(hlina_chunks);
-
 	return result;
 }
 
@@ -497,53 +486,39 @@ static int AllocMemory(unsigned long *busaddr, unsigned long size,
 	int i = 0;
 	int j = 0;
 	unsigned int skip_chunks = 0;
-
-	/* calculate how many chunks we need; round up to chunk boundary */
 	unsigned int alloc_chunks = (size + CHUNK_SIZE - 1) / CHUNK_SIZE;
-
 	*busaddr = 0;
+
 	spin_lock(&mem_lock);
-	/* run through the chunk table */
 	for (i = 0; i < chunks;) {
 		skip_chunks = 0;
-		/* if this chunk is available */
 		if (!hlina_chunks[i].chunks_reserved) {
-			/* check that there is enough memory left */
 			if (i + alloc_chunks > chunks)
 				break;
-			/* check that there is enough consecutive
-			 * chunks available
-			 */
 			for (j = i; j < i + alloc_chunks; j++) {
 				if (hlina_chunks[j].chunks_reserved) {
 					skip_chunks = 1;
-					/* skip the used chunks */
 					i = j + hlina_chunks[j].chunks_reserved;
 					break;
 				}
 			}
-
-			/* if enough free memory found */
-		if (!skip_chunks) {
-			*busaddr = hlina_chunks[i].bus_address;
-			hlina_chunks[i].filp = filp;
-			hlina_chunks[i].chunks_reserved = alloc_chunks;
-			break;
+			if (!skip_chunks) {
+				*busaddr = (unsigned long)hlina_chunks[i].bus_address;
+				hlina_chunks[i].filp = filp;
+				hlina_chunks[i].chunks_reserved = alloc_chunks;
+				break;
 			}
 		} else {
-			/* skip the used chunks */
 			i += hlina_chunks[i].chunks_reserved;
 		}
 	}
 	spin_unlock(&mem_lock);
 
 	if (*busaddr == 0) {
-		pr_warn("memalloc: Allocation FAILED: size =%lu\n",
-			size);
-		return -EFAULT;
+		pr_warn("memalloc: Allocation FAILED: size =%lu\n", size);
+		return -ENOMEM;
 	}
-	PDEBUG("MEMALLOC OK: size: %lu, reserved: %ld\n", size,
-	       alloc_chunks * CHUNK_SIZE);
+	PDEBUG("MEMALLOC OK: size: %lu, reserved: %ld\n", size, alloc_chunks * CHUNK_SIZE);
 	return 0;
 }
 
@@ -552,22 +527,28 @@ static int FreeMemory(unsigned long busaddr, const struct file *filp)
 {
 	int i = 0;
 	spin_lock(&mem_lock);
-	for (i = 0; i < chunks; i++) {
-	/* user space SW has stored the translated bus address,
-	 * add addr_transl to translate back to our address space
-	 */
-		if (hlina_chunks[i].bus_address == busaddr + addr_transl) {
-			if (hlina_chunks[i].filp == filp) {
-				hlina_chunks[i].filp = NULL;
-				hlina_chunks[i].chunks_reserved = 0;
-			} else {
-				pr_warn("memalloc: Owner mismatch while freeing memory!\n");
+	for (i = 0; i < chunks;) {
+		if (hlina_chunks[i].chunks_reserved != 0) {
+			/* accept raw physical OR translated hw‑address */
+			if ((hlina_chunks[i].bus_address == busaddr) ||
+			    ((hlina_chunks[i].bus_address - addr_transl) == busaddr)) {
+				if (hlina_chunks[i].filp == filp) {
+					hlina_chunks[i].filp = NULL;
+					hlina_chunks[i].chunks_reserved = 0;
+					spin_unlock(&mem_lock);
+					return 0;
+				} else {
+					pr_warn("memalloc: Owner mismatch while freeing memory!\n");
+				}
+				break;
 			}
-			break;
+			i += hlina_chunks[i].chunks_reserved;
+		} else {
+			i++;
 		}
 	}
 	spin_unlock(&mem_lock);
-	return 0;
+	return -ENOENT;
 }
 
 /* Reset "used" status */
@@ -580,51 +561,46 @@ static void ResetMems(void)
 		hlina_chunks[i].bus_address = ba;
 		hlina_chunks[i].filp = NULL;
 		hlina_chunks[i].chunks_reserved = 0;
-
 		ba += CHUNK_SIZE;
 	}
 	spin_unlock(&mem_lock);
 }
 
 static int memlloc_mmap_old(struct file *filp, struct vm_area_struct *vma)
-{
-	size_t size = vma->vm_end - vma->vm_start;
-	int ret = 0;
+{size_t size = vma->vm_end - vma->vm_start;
+	unsigned long phys;
 	unsigned long start = 0, end = 0;
 	unsigned long base_start = 0, base_end = 0;
-
-	PDEBUG("%s %08lx-%08lx -> %08lx, %s\n", __func__,
-		   (long)(vma->vm_pgoff << PAGE_SHIFT),
-		   (long)(vma->vm_pgoff << PAGE_SHIFT) + (int)(size),
-		   (long)vma->vm_start,
-		   (filp->f_flags & O_SYNC) ? "uncached" : "cached");
+	int ret;
 
 	start = vma->vm_pgoff << PAGE_SHIFT;
 	end = start + size;
 	base_start = alloc_base;
-	base_end   = ((alloc_base + alloc_size * 1024 * 1024) /
-				  PAGE_SIZE + 1) * PAGE_SIZE;
+	base_end   = ((alloc_base + alloc_size * 1024 * 1024) / PAGE_SIZE + 1) * PAGE_SIZE;
+
 	if (start < base_start || base_end < end) {
-		pr_err("Invalid adress %08lx-%08lx\n", start, end);
+		pr_err("Invalid adress %08lx‑%08lx\n", start, end);
+		return -EINVAL;
+	}
+	if ((start & (PAGE_SIZE - 1)) != 0) {
+		pr_err("memlloc_mmap: offset not page aligned\n");
 		return -EINVAL;
 	}
 
-	// support only uncached mode
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-
+	phys = vma->vm_pgoff << PAGE_SHIFT;
+	vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	vma->vm_ops = &memlloc_vm_ops;
 
-	ret = remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff, size,
-		  vma->vm_page_prot);
+	ret = io_remap_pfn_range(vma,
+			vma->vm_start,
+			vma->vm_pgoff,
+			size,
+			vma->vm_page_prot);
 	if (ret != 0) {
-		pr_err("remap_pfn_range() failed.\n");
-		goto err_out;
+		pr_err("io_remap_pfn_range failed ret=%d\n", ret);
+		return ret;
 	}
-
 	return 0;
-
-err_out:
-	return ret;
 }
 
 static int memlloc_mmap(struct file *filp, struct vm_area_struct *vma)
@@ -635,21 +611,21 @@ static int memlloc_mmap(struct file *filp, struct vm_area_struct *vma)
 	unsigned long base_start = 0, base_end = 0;
 	int ret;
 
-	printk("%s %s %d:\n", __FILE__, __func__, __LINE__);
-
 	start = vma->vm_pgoff << PAGE_SHIFT;
 	end = start + size;
 	base_start = alloc_base;
 	base_end   = ((alloc_base + alloc_size * 1024 * 1024) / PAGE_SIZE + 1) * PAGE_SIZE;
 
 	if (start < base_start || base_end < end) {
-		pr_err("Invalid adress %08lx-%08lx\n", start, end);
+		pr_err("Invalid adress %08lx‑%08lx\n", start, end);
+		return -EINVAL;
+	}
+	if ((start & (PAGE_SIZE - 1)) != 0) {
+		pr_err("memlloc_mmap: offset not page aligned\n");
 		return -EINVAL;
 	}
 
 	phys = vma->vm_pgoff << PAGE_SHIFT;
-
-	/* 关键修改：VPU DMA buffer 使用 writecombine，不要 pgprot_noncached */
 	vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	vma->vm_ops = &memlloc_vm_ops;
 
@@ -658,13 +634,10 @@ static int memlloc_mmap(struct file *filp, struct vm_area_struct *vma)
 			vma->vm_pgoff,
 			size,
 			vma->vm_page_prot);
-
 	if (ret != 0) {
 		pr_err("io_remap_pfn_range failed ret=%d\n", ret);
 		return ret;
 	}
-
-	printk("%s %s %d: mmap ok phys=0x%lx size=0x%zx\n", __FILE__, __func__, __LINE__, phys, size);
 	return 0;
 }
 

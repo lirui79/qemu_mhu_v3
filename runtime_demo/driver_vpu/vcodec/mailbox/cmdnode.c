@@ -33,6 +33,7 @@ cmdnode_t*    cmdnode_alloc(uint32_t ackNum, uint32_t sessionID, uint64_t timeSt
     cnode->code      = CMD_ERR_UNKNOWN;
     init_waitqueue_head(&cnode->wait);
     kref_init(&cnode->refcount);//refcount 1
+    cnode->cmdMsg    = NULL;
     return cnode;
 }
 

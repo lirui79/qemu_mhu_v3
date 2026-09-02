@@ -398,7 +398,7 @@ static int __init vcx_vcodec_init(void)
     };
 
     cmda78_init_mgr();
-
+    printk("%s:%s:%d recv\n", __FILE__, __func__, __LINE__);
     // 1. 创建类
     vcx_class = class_create(CLASS_NAME);
     if (IS_ERR(vcx_class)) {
@@ -464,7 +464,7 @@ static int __init vcx_vcodec_init(void)
         }
         pr_info("Registered platform device: %s.%d\n", VCX_DRIVER_NAME, i);
     }
-
+    printk("%s:%s:%d recv\n", __FILE__, __func__, __LINE__);
     cmda78_start_mgr();
     return 0;
 

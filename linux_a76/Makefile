@@ -18,7 +18,7 @@ ENC_ENV ?= arm64_linux
 DEC_ENV ?= arm_pclinux
 TRACE ?= n
 USE_MODEL_SIMULATION ?= n
-USE_VCMD ?= y
+USE_VCMD ?= n
 STATIC ?= y
 
 BOOT_BIN := $(BOOT_BUILD)/boot.bin
