@@ -4,17 +4,11 @@
  *    - 代码(.text)+ .data(VMA=LMA)+ FreeRTOS 堆 + .bss + .heap + .stack
  *      全部放入本地 RAM,空间充足。
  * 2) 共享 DDR(0x80000000..0xa0000000,512MB)可读写:
- *    - startup.S MPU Region 5 已配置 DDR 为 Full access(RW)+ ENable。
- *    - A76 固件加载在 0x80100000..0x80500000(4MB bin),A76 ram 段
- *      0x80500000..0x80900000,A76 动态 DDR_BASE=0x81000000。
- *    - R52 的共享数据缓冲(BQueue 数据区等)放在 0x80900000 起 2MB,
- *      避开 A76 固件区与 A76 动态区,由 ddr_mem 模块(utils/ddr_mem.c)
- *      分配,减轻本地 RAM 堆压力。
  */
 __RAM_BASE = 0x00000000;
 __RAM_SIZE = 0x01000000;
-__DDR_BUF_BASE = 0x80900000;
-__DDR_BUF_SIZE = 0x00200000;
+__DDR_BUF_BASE = 0x8F000000;
+__DDR_BUF_SIZE = 0x01000000;
 
 MEMORY
 {
@@ -128,19 +122,6 @@ SECTIONS
         __data_end = . ;
     } > RAM
 
-    /* FreeRTOS 堆(heap_4 的 ucHeapPerCore,64KB/核,见 FreeRTOSConfig.h
-     * configTOTAL_HEAP_SIZE)。放本地 RAM;该段须在 .bss 之前,ld 才会把
-     * heap_4.o(.bss) 归入此段 */
-    .frtos_heap (NOLOAD) :
-    {
-        . = ALIGN(8);
-        __frtos_heap_start = .;
-        *heap_4.o(.bss)
-        *heap_4.o(COMMON)
-        . = ALIGN(8);
-        __frtos_heap_end = .;
-    } > RAM
-
     .bss (NOLOAD) :
     {
         . = ALIGN(4);
@@ -157,7 +138,7 @@ SECTIONS
         __heap_start = .;
         __end__ = .;
         PROVIDE(end = .);
-        . = . + 0x400;
+        . = . + 0x1000;
         __heap_end = .;
     } > RAM
 
@@ -165,11 +146,11 @@ SECTIONS
     .stack (NOLOAD) :
     {
         . = ALIGN(8);
-        . = . + 0x2000;
-        __stack_core_0 = .;
-        . = . + 0x2000;
-        __stack_core_1 = .;
-        __stack = .;
+        __stack_core_0 = .;          /* core0 栈底（低地址） */
+        . = . + 0x4000;              /* core0 栈: 16KB */
+        __stack_core_1 = .;          /* core1 栈底 */
+        . = . + 0x4000;              /* core1 栈: 16KB */
+        __stack = .;                 /* 栈顶（最高地址） */
     } > RAM
 
     /* 共享数据缓冲(共享 DDR):BQueue 数据区等由 utils/ddr_mem.c 的

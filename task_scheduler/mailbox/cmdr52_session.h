@@ -45,7 +45,7 @@ typedef struct {
     uint32_t               seqSNum;// sequence number, from 0 to 0xFFFFFFFF
     uint32_t               status;
     uint32_t               total_workload;
-    spinlock_t             spinlock;
+    spinlock               spinlock;
 } cmdr52_session_t;
 
 int32_t        cmdr52_session_init(cmdr52_session_t *session, uint32_t sessionID);

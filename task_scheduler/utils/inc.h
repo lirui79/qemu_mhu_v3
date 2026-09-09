@@ -1,4 +1,4 @@
-/********************************************************************************* 
+/*********************************************************************************
 **       This software is confidential and proprietary and may be used          **
 **        only as expressly authorized by a licensing agreement from            **
 **                                                                              **
@@ -23,10 +23,7 @@
 
 //#define  VCMD_ALLOC_MEM
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
-
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 
 //#define ANY_CMDBUF_ID                       (0xFFFF)
 /* R52 本地 RAM 已扩到 16MB:vcmd_mgr_r52[2] 静态 bss = SLOT×48B×2 管理器,

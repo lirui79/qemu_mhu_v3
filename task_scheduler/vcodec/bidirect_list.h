@@ -79,14 +79,9 @@ typedef struct bi_list {
 
 void init_bi_list(bi_list *list);
 
-bi_list_node *bi_list_create_node(void);
-
-void bi_list_free_node(bi_list_node *node);
-
 void bi_list_insert_node_tail(bi_list *list, bi_list_node *current_node);
 
-void bi_list_insert_node_before(bi_list *list, bi_list_node *base_node,
-				bi_list_node *new_node);
+void bi_list_insert_node_before(bi_list *list, bi_list_node *base_node,	bi_list_node *new_node);
 
 void bi_list_remove_node(bi_list *list, bi_list_node *current_node);
 

@@ -36,7 +36,7 @@ int mhu_v3_send_data(uint32_t r52id, const u8 *data, uint32_t size);
 /*
  * Recv 128-byte data via Mailbox
  */
-int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t *sz);
+int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t sz);
 
 
 #ifdef __cplusplus

@@ -15,7 +15,6 @@
 *********************************************************************************/
 
 #include "vcx_kthread.h"
-#include "vcx_watchdog.h"
 #include "vcx_cmdbuf_obj.h"
 #include <limits.h>
 
@@ -31,9 +30,9 @@
 static void _vcmd_bus_err_process(struct hantrovcmd_dev *dev)
 {
 	struct vcmd_subsys_info *subsys = dev->subsys_info;
-	unsigned long flags;
+	uint32_t   flags;
 
-	spin_lock_irqsave(dev->spinlock, flags);
+	flags = spin_lock_irqsave(dev->spinlock);
 	if (dev->hw_feature.vcarb_ver == VCARB_VERSION_3_0) {
 		// PF do vcd/vce abort and AXIFE flush
 		vcmd_start(dev, 0);
@@ -63,7 +62,7 @@ static int process_subsystem_exceptions(struct hantrovcmd_dev *dev)
 {
 	int ret;
 	u32 val;
-	unsigned long flags;
+	uint32_t   flags;
 
 	volatile u8 *axi2to1_hwregs = dev->subsys_info->hwregs[SUB_MOD_AXI2TO1];
 
@@ -72,7 +71,7 @@ static int process_subsystem_exceptions(struct hantrovcmd_dev *dev)
 		return -1;
 	}
 
-	spin_lock_irqsave(dev->spinlock, flags);
+	flags = spin_lock_irqsave(dev->spinlock);
 	ret = AXI2TO1_flush(axi2to1_hwregs);
 	if (ret < 0) {
 		spin_unlock_irqrestore(dev->spinlock, flags);
@@ -125,10 +124,10 @@ static int process_subsystem_exceptions(struct hantrovcmd_dev *dev)
  */
 static void hook_vcmd_external_timeout(void *_dev)
 {
-	unsigned long flags;
+	uint32_t   flags;
 	struct hantrovcmd_dev *dev = (struct hantrovcmd_dev *)_dev;
 
-	spin_lock_irqsave(dev->spinlock, flags);
+	flags = spin_lock_irqsave(dev->spinlock);
 	dev->state = VCMD_STATE_IDLE;
 	spin_unlock_irqrestore(dev->spinlock, flags);
 
@@ -140,15 +139,14 @@ static void hook_vcmd_external_timeout(void *_dev)
 /**
  * @brief vcmd kernel thread main function
  */
-static void _vcmd_kthread_fn(void *pvParameters)
+void _vcmd_kthread_proc(vcmd_mgr_t *vcmd_mgr)
 {
-	vcmd_mgr_t *vcmd_mgr = (vcmd_mgr_t *)pvParameters;
 	struct hantrovcmd_dev *dev = NULL;
     int i;
 
 	while (1) {
-        uint32_t ulNotifiedValue;
-        xTaskNotifyWait(0, ULONG_MAX, &ulNotifiedValue, portMAX_DELAY);
+//        uint32_t ulNotifiedValue;
+//        xTaskNotifyWait(0, ULONG_MAX, &ulNotifiedValue, portMAX_DELAY);
         for (i = 0; i < vcmd_mgr->subsys_num; i++) {
             dev = &vcmd_mgr->dev_ctx[i];
 
@@ -185,119 +183,5 @@ static void _vcmd_kthread_fn(void *pvParameters)
             }
 #endif
         }
-
-/*
-		if (wait_event_interruptible(vcmd_mgr->kthread_waitq,
-				_vcmd_kthread_actions(vcmd_mgr, &dev))) {
-			vcmd_klog(LOGLVL_ERROR, "%s: signaled!!!\n", __func__);
-			return -ERESTARTSYS;
-		}
-		if (dev == NULL)
-			continue;
-
-		if (dev->kthread_actions & KT_ACT_HW_TIMEOUT) {
-			dev->kthread_actions = 0;
-			// if external timeout, will do system reset 
-			hook_vcmd_external_timeout(dev);
-			continue;
-		}
-		if (dev->kthread_actions & KT_ACT_HW_BUS_ERR) {
-			dev->kthread_actions = 0;
-			_vcmd_bus_err_process(dev);
-			continue;
-		}
-#ifdef AXI2TO1_SUPPORT
-		if (dev->kthread_actions &
-				(KT_ACT_CMDBUF_TIMEOUT | KT_ACT_AXI2TO1_EXCEPTION)) {
-			dev->kthread_actions = 0;
-			// if has exceptions, will reset subsystem
-			process_subsystem_exceptions(dev);
-			continue;
-		}
-#endif
-#ifdef SUPPORT_WATCHDOG
-		if (dev->kthread_actions & KT_ACT_WATCHDOG) {
-			dev->kthread_actions = 0;
-			_vcmd_watchdog_process(dev);
-			continue;
-		}
-#endif
-*/
 	}
 }
-
-/**
- * @brief wake up vcmd kernel thread
- */
-void _vcmd_kthread_wakeup(vcmd_mgr_t *vcmd_mgr, unsigned int value)
-{    
-    // 【正确】在回调中发送通知给任务
-    // 注意：这里使用的是 xTaskNotify，而不是 xTaskNotifyFromISR
-    xTaskNotify(vcmd_mgr->kthread, value, eNoAction); 
-}
-
-void _vcmd_kthread_wakeup_irq(vcmd_mgr_t *vcmd_mgr, unsigned int value)
-{
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE; // 1. 必须初始化为 pdFALSE
-    // 使用句柄精准唤醒 SensorTask
-    if (vcmd_mgr->kthread == NULL) {
-        return;
-    }
-
-    // 2. 发送通知
-    // 示例：唤醒任务，不传具体数据
-    xTaskNotifyFromISR(
-        vcmd_mgr->kthread,   // 目标任务句柄
-        value,                   // 值（eNoAction 下无关紧要）
-        eNoAction,           // 动作
-        &xHigherPriorityTaskWoken // 传入地址
-    );
-
-    // 3. 【必须】检查是否需要上下文切换
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-//	wake_up_interruptible_all(&vcmd_mgr->kthread_waitq);
-}
-
-/**
- * @brief create kernel thread for vcmd driver
- */
-void _vcmd_kthread_create(vcmd_mgr_t *vcmd_mgr)
-{
-/*	vcmd_mgr->stop_kthread = 0;
-	init_waitqueue_head(&vcmd_mgr->kthread_waitq);
-	vcmd_mgr->kthread =
-		kthread_run(_vcmd_kthread_fn, (void *)vcmd_mgr, "vcmd_kthread");
-	if (IS_ERR(vcmd_mgr->kthread)) {
-		vcmd_klog(LOGLVL_ERROR, "create vcmd kthread failed\n");
-		return;
-	}*/
-    BaseType_t xStatus;
-
-    // 2. 创建任务 1：优先级 1，栈深 128 字 (512 字节)，传入参数 1
-    xStatus = xTaskCreate(
-        _vcmd_kthread_fn,           // 任务函数
-        "vcmd_kthread",       // 名称
-        128,                // 栈深度 (Words)
-        (void *)vcmd_mgr,          // 参数: LED ID 1
-        1,                  // 优先级
-        &vcmd_mgr->kthread           // 句柄
-    );
-
-    if (xStatus != pdPASS) {
-       vcmd_klog(LOGLVL_ERROR, "create vcmd kthread failed\n");
-       vcmd_mgr->kthread = NULL;
-    }
-}
-
-/**
- * @brief stop kernel thread vcmd driver
- */
-void _vcmd_kthread_stop(vcmd_mgr_t *vcmd_mgr)
-{
-	if (NULL != (vcmd_mgr->kthread)) {
-        vTaskDelete(vcmd_mgr->kthread);//		kthread_stop(vcmd_mgr->kthread);
-		vcmd_mgr->kthread = NULL;
-	}
-}
-
-

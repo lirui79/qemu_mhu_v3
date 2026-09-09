@@ -33,7 +33,7 @@ void           CQueueDelete(CQueueHandle_t handle);
 
 uint32_t       CQueueCapacity(CQueueHandle_t handle);
 
-uint32_t       CQueueLength(CQueueHandle_t handle);
+uint32_t       CQueueSize(CQueueHandle_t handle);
 
 uint32_t       CQueueItemSize(CQueueHandle_t handle);
 

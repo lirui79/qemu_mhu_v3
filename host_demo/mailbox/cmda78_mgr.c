@@ -224,6 +224,9 @@ static uint32_t cmda78_check(cmdMsg_t *cmdMsg, cmda78_session_t **session)
     cmdMsg->crc32 = crc32;
     if (crc32 != crc32Now) {
         retCode = CMD_ERR_INVALID_CHECKSUM;
+        ts_printf("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc32=%x rc32Now:%x\n", \
+            (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
+            cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32, crc32Now);
         goto RETURN_ERROR;
     }
 
@@ -241,12 +244,16 @@ RETURN_ERROR:
 
 int32_t cmda78_proc_cmdMsg(cmdMsg_t *cmdMsg) {
     cmda78_session_t *session = NULL;
+    uint32_t retCode = CMD_ERR_SUCCESS;
 
-    if (cmda78_check(cmdMsg, &session) != CMD_ERR_SUCCESS) {
-        return CMD_ERR_INVALID_PARAM;
+    retCode = cmda78_check(cmdMsg, &session);
+    if (retCode != CMD_ERR_SUCCESS) {
+        cmda78_release_cmdMsg(cmdMsg);
+        return retCode;
     }
 
     if (cmda78_session_check(session, cmdMsg) < 0) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_SEQUENCEID;
     }
 

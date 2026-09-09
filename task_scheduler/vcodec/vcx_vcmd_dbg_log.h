@@ -17,10 +17,7 @@
 #ifndef _VCX_VCMD_DBG_LOG_H_
 #define _VCX_VCMD_DBG_LOG_H_
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
-
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 #include "vcx_vcmd_priv.h"
 
 #ifdef __cplusplus

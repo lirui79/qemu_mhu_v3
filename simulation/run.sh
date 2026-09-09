@@ -51,18 +51,4 @@ HOST_LD="$(sanitize_ld_path "${LD_LIBRARY_PATH:-}")"
 CFG_FILE=conf.lua
 #CFG_FILE=conf_sample.lua
 export LD_LIBRARY_PATH="${DIR}/lib:${DIR}/lib/libqemu${HOST_LD:+:${HOST_LD}}"
-
-# 关键:必须给 R52/A76 的 QEMU 实例显式配置 remote_argv.3 = ...gdb_port。
-# 若缺失该参数,arm_gicv3 的 redistributor 共享内存路由未完整初始化,
-# R52 CPU 读 GICR_TYPER 会 fall-through 到 0x0 读到向量表指令(0xE59FF018),
-# getRedistID() 匹配失败 → R52 在 interrupt_init() 卡死(无日志/仅 GIC 垃圾)。
-# 设 gdb_port=0 表示禁用 gdb server(不阻塞启动),但保留正确初始化路径。
-GDB_PORT_R52="${GDB_PORT_R52:-0}"
-GDB_PORT_A76="${GDB_PORT_A76:-0}"
-
-"${DIR}/cortex-r52-a76-vp"  --gs_luafile "${DIR}/${CFG_FILE}" \
-    --param 'platform.plugin_0.remote_argv.2="--param"' \
-    --param "platform.plugin_0.remote_argv.3=remote_platform.cpu_0.gdb_port=${GDB_PORT_R52}" \
-    --param 'platform.plugin_1.remote_argv.2="--param"' \
-    --param "platform.plugin_1.remote_argv.3=remote_platform.cpu_0.gdb_port=${GDB_PORT_A76}" \
-    "$@" || true
+"${DIR}/cortex-r52-a76-vp"  --gs_luafile "${DIR}/${CFG_FILE}" "$@" || true

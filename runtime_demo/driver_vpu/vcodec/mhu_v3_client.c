@@ -14,7 +14,7 @@
 **                           *.c mhu v3 source code                             **
 *********************************************************************************/
 
-#include "inc.h"
+#include "cmdef.h"
 #include "vcx_priv.h"
 #include "mhu_v3_priv.h"
 #include "mhu_v3_client.h"
@@ -24,6 +24,27 @@
 #include <linux/completion.h>
 #include <linux/interrupt.h>
 
+#include <linux/timekeeping.h>
+#include <linux/time64.h>
+
+/* polling timeout in milliseconds */
+#define MHU_WAIT_TIMEOUT    (500)
+
+/* MFFCW_CTRL register bits */
+#define MFFCW_CTRL_FF           (1U << 31U)
+#define MFFCW_CTRL_MSBF         (1U << 1U)
+#define MFFCW_CTRL_MBX_COMB_EN  (1U << 0U)
+
+/* MFFCW_FLG32 field masks */
+#define MFFCW_FLG_VFLG(m)       (1U << (2U + 4U*(m)))
+#define MFFCW_FLG_FLG_SHIFT(m)  (0U + 4U*(m))
+#define MFFCW_FLG_FLG_MASK      0x3U
+
+/* FLG field encoding */
+#define MHU_FLG_PAYLOAD     0x00U
+#define MHU_FLG_SOT         0x01U
+#define MHU_FLG_EOT         0x02U
+#define MHU_FLG_SOT_EOT     0x03U
 
 typedef enum {
     INT_PRIO_LOWEST   = 0xFF,
@@ -66,6 +87,15 @@ static struct mhu_v3_manager  g_mhu_v3_mgr;
 
 
 
+static uint64_t get_arch_timer_ms(void) {
+    struct timespec64 ts;
+    uint64_t ms;
+    // 获取 timespec64 结构体
+    ktime_get_boottime_ts64(&ts);    // 转换为毫秒: 秒 * 1000 + 纳秒 / 1,000,000
+    ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return ms;
+}
+
 int mhu_v3_wait_event_interruptible(uint32_t r52id) {
     struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
     uint32_t ch = 2 * r52id + 1;
@@ -80,92 +110,119 @@ int mhu_v3_wait_event_interruptible(uint32_t r52id) {
 /*
  * Recv 128-byte data via Mailbox
  */
-int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t size) {
+int mhu_v3_recv_data(uint32_t r52id, u8 *buf_ptr, uint32_t buf_len) {
     uint32_t ch = 2 * r52id + 1;
     struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
-    uint32_t *dwptr = (uint32_t*)data, buf_len = size;
-    uint32_t  dwlen = (buf_len / 4);
-    uint32_t  fill, val, len = 0, i = 0,st;
-    uint32_t  flags, stale;
-    uint8_t   sot = 0, eot = 0;
+    uint32_t *dwptr = (uint32_t*)buf_ptr;
+    uint32_t  dwlen = (buf_len / 4U);
+    uint32_t  fill, val, len = 0U;
+    uint32_t  flg_val, flg32_reg, ctrl_reg, vflg_valid;
+    uint8_t   sot = 0U, eot = 0U;
+    uint64_t  timeout = get_arch_timer_ms() + 500;
+
+    sot = 0U;
+    eot = 0U;
+    len = 0U;
 
     if ((buf_len % 4) != 0) {
         printk("MHUS: invalid len %u\n", buf_len);
         return -1;
     }
 
+    /* wait for at least one word in fifo */
+    do {
+        fill   = mhu_fifo_rx_fill(mgr->mbx , ch);
+        if(timeout <= get_arch_timer_ms()) {
+            if (fill >= CMD_MSG_MIN_SIZE) {
+                break;
+            }
+
+            //ts_printf("mhu: fifo%u timeout on empty\n", ch);
+            return -2;
+        }
+    } while (fill < CMD_MSG_MIN_SIZE);
+
+    timeout = get_arch_timer_ms() + 500;
     while (1) {
         if (len >= dwlen) {
             printk("MBX: no enough buffer, len=%u\n", buf_len);
             break;
         }
 
-        /* wait for fifo data */
+        /* wait for at least one word in fifo */
         do {
-            st   = mhu_read32(mgr->mbx + MHU_MBX_FFCW_ST(ch));
-            fill = st & 0x7FF;
+            fill   = mhu_fifo_rx_fill(mgr->mbx, ch);
+            if(timeout <= get_arch_timer_ms()) {
+                if (fill > 0) {
+                    break;
+                }
+
+                //ts_printf("mhu: fifo%u timeout on empty\n", ch);
+                return -3;
+            }
         } while (!fill);
 
         /* pop data and flag from fifo */
 	    spin_lock(&mgr->rlock[r52id]);
         val   = mhu_fifo_pop32(mgr->mbx, ch);
-        flags = mhu_read32(mgr->mbx + MHU_MBX_FFCW_FLG(ch));
-        stale = mhu_read32(mgr->mbx + MHU_MBX_FFCW_CTRL(ch));
+        flg32_reg = mhu_read32(mgr->mbx + MHU_MBX_FFCW_FLG(ch));
+        ctrl_reg = mhu_read32(mgr->mbx + MHU_MBX_FFCW_CTRL(ch));
 	    spin_unlock(&mgr->rlock[r52id]);
 
-//      printk("MBX: data=0x%x flg=0x%x stale=0x%x st=0x%x\n", val, flags, stale, st);
-        if (flags & 0x4) {// 0
-            if ((flags & 0x1) != 0)
-                sot = 1;
-            if ((flags & 0x2) != 0)
-                eot = 1;
-        }
-        if (flags & (0x4 << 4)) {// 1
-            if ((flags & (0x1 << 4)) != 0)
-                sot = 1;
-            if ((flags & (0x2 << 4)) != 0)
-                eot = 1;
-        }
-        if (flags & (0x4 << 8)) {// 1
-            if ((flags & (0x1 << 8)) != 0)
-                sot = 1;
-            if ((flags & (0x2 << 8)) != 0)
-                eot = 1;
-        }
-        if (flags & (0x4 << 12)) {// 1
-            if ((flags & (0x1 << 12)) != 0)
-                sot = 1;
-            if ((flags & (0x2 << 12)) != 0)
-                eot = 1;
+         /* MSBF=0 → latest pop word is FLG0; MSBF=1 → latest pop word is FLG3 */
+        if ((sot == 0) || (eot == 0)) {
+            vflg_valid = ((flg32_reg & MFFCW_FLG_VFLG(0)) != 0U);
+            if (vflg_valid) {
+                flg_val    = (flg32_reg >> MFFCW_FLG_FLG_SHIFT(0)) & MFFCW_FLG_FLG_MASK;
+                if (sot == 0) {
+                    sot = ((flg_val == MHU_FLG_SOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+                if (eot == 0) {
+                    eot = ((flg_val == MHU_FLG_EOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+            }
         }
 
-        /* check for start of transfer boundary */
-        if (!sot) {
-            printk("MBX: invalid SOT, drop 0x%x\n", val);
+        if ((sot == 0) || (eot == 0)) {
+            vflg_valid = ((flg32_reg & MFFCW_FLG_VFLG(3)) != 0U);
+            if (vflg_valid) {
+                flg_val    = (flg32_reg >> MFFCW_FLG_FLG_SHIFT(3)) & MFFCW_FLG_FLG_MASK;
+                if (sot == 0) {
+                    sot = ((flg_val == MHU_FLG_SOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+                if (eot == 0) {
+                    eot = ((flg_val == MHU_FLG_EOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+            }
+        }
+
+        /* drop garbage data before SOT arrives */
+        if(!sot && len == 0U) {
+            printk("MBX: drop pre-SOT garbage word 0x%08x ch=%u\n", val, ch);
             continue;
         }
 
-        /* save data into user buffer */
         dwptr[len++] = val;
 
-        /* check for end of transfer boundary */
-        if (eot)
+        if(eot) {
+            /* complete one full packet */
             break;
+        }
     }
 
 	spin_lock(&mgr->rlock[r52id]);
     /* check if more data is pending */
     fill = mhu_fifo_rx_fill(mgr->mbx, ch);
     if (!fill) {
-        stale = mhu_read32(mgr->mbx + MHU_MBX_FFCW_INT_ST(ch));
-        if (stale) {
-            mhu_fifo_clear_rx_irq(mgr->mbx, ch, stale);
+        val = mhu_read32(mgr->mbx + MHU_MBX_FFCW_INT_ST(ch));
+        if (val) {
+            mhu_fifo_clear_rx_irq(mgr->mbx, ch, val);
         }
         mhu_write32(mgr->mbx + MHU_MBX_FFCW_INT_EN(ch), 0xFFFFFFFF);
     }
 	spin_unlock(&mgr->rlock[r52id]);
 //    printk("MHU V3: Received and copied %d bytes of data.\n", *size);
-    atomic64_dec(&mgr->ffcompleted[i]);
+    atomic64_dec(&mgr->ffcompleted[ch]);
     return 0;
 }
 
@@ -177,10 +234,20 @@ int mhu_v3_send_data(uint32_t r52id, const u8 *data_ptr, uint32_t data_len) {
     struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
     uint32_t *dwptr = (uint32_t*)data_ptr;
     uint32_t  dwlen = data_len / 4;
-    uint32_t  i, flg;
+    uint32_t  i, flg, free;
+    uint64_t  timeout = get_arch_timer_ms() + 500;
     if ((data_len % 4) != 0) {
         printk("MHUS: invalid len %u\n", data_len);
         return -1;
+    }
+    /* wait until fifo has enough space */
+    do {
+        free = mhu_read32(mgr->pbx + MHU_PBX_FFCW_PAY(ch)) & 0x7FF;
+    } while ((free < data_len) && (timeout > get_arch_timer_ms()));
+
+    if (free < data_len) {
+        printk("mhu: fifo%u timeout on full (%u < %u)\n", ch, free, data_len);
+        return -2;
     }
 
 	spin_lock(&mgr->wlock[r52id]);

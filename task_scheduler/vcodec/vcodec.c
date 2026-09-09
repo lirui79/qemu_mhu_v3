@@ -19,9 +19,7 @@
 #include "cmdr52_proc.h"
 #include "vcx_cmdbuf_obj.h"
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,8 +71,7 @@ int32_t          vcodec_init_vcmd(cmdMsg_t *cmdMsg) {
 int32_t          vcx_vcmd_init(cmdMsg_t *cmdMsg) {
     vce_vcmd_init(&cmdr52_mgr_get()->mtb[VCMD_MGR_ID_ENC]);
     vcd_vcmd_init(&cmdr52_mgr_get()->mtb[VCMD_MGR_ID_DEC]);
-	//ts_printf("%s:%s:%d started\n", __FILE__, __func__, __LINE__);
-    return cmdr52_start_mgr();
+    return 0;
 }
 
 int32_t          vcx_vcmd_exit(cmdMsg_t *cmdMsg) {

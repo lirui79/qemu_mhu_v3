@@ -43,10 +43,9 @@ int mhu_v3_send_data(uint32_t r52id, const u8 *data, uint32_t size) {
 /*
  * Recv 128-byte data via Mailbox
  */
-int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t *sz) {
+int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t sz) {
     uint32_t ch = 2 * r52id + 1;// 0 r52   0- channel a78 -> r52   1- channel r52 -> a78 ; 1 r52   2- channel a78 -> r52   3- channel r52 -> a78 
-    uint32_t rvsz = mhu_recv_data(ch, (void*)data, CMD_MSG_MAX_SIZE);
-    *sz = rvsz;
+    uint32_t rvsz = mhu_recv_data(ch, (void*)data, sz);
     if (rvsz <= 0) {
         ts_printf("failed to receive hw info, ret %u\n", rvsz);
         return -1;

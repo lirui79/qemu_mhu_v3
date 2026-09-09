@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include <stdint.h>
+
+#include "cmdef.h"
 #include "platform.h"
 #include "macro.h"
 
@@ -50,7 +52,41 @@ uint32_t get_cpu_id(void);
 void arch_timer_init(uint32_t tick_ms);
 void arch_timer_isr(void);
 void arch_delay_us(uint32_t count);
+
+/**
+ * @brief  Return the time elapsed since startup in nanoseconds
+ * @return time in nanoseconds
+ */
 uint64_t arch_get_time_ns(void);
+
+/**
+ * @brief  Return the time elapsed since startup in microseconds
+ * @return time in microseconds
+ */
+uint64_t arch_get_time_us(void);
+
+/**
+ * @brief  Return the time elapsed since startup in milliseconds
+ * @return time in milliseconds
+ */
+uint64_t arch_get_time_ms(void);
+
+/**
+ * @brief  Check whether the given deadline has already passed
+ * @param  expire_ms: absolute deadline in milliseconds
+ * @return non-zero if the current time is after expire_ms,
+ *         zero if the deadline has not yet been reached
+ */
+int time_after(uint64_t expire_ms);
+
+/**
+ * @brief  Check whether the given deadline is still in the future
+ * @param  expire_ms: absolute deadline in milliseconds
+ * @return non-zero if the current time is before expire_ms,
+ *         zero if the deadline has been reached or passed
+ */
+int time_before(uint64_t expire_ms);
+
 
 static inline uint64_t arch_local_irq_save(void)
 {
@@ -94,8 +130,6 @@ void mhu_send_event(uint32_t ch, uint32_t event);
 uint32_t mhu_wait_event(uint32_t ch, uint32_t event);
 uint32_t mhu_send_data(uint32_t ch, void *data_ptr, uint32_t data_len);
 uint32_t mhu_recv_data(uint32_t ch, void *buf_ptr, uint32_t buf_len);
-
-uint32_t mhu_rx_data_fill(uint32_t ch);
 
 
 typedef void (*irq_callback_t)(uint32_t irq, uint32_t channel);

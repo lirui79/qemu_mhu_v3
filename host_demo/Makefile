@@ -47,7 +47,6 @@ INCLUDES       := \
 	-I$(PROJ_ROOT)/mailbox \
 	-I$(PROJ_ROOT)/system \
 	-I$(PROJ_ROOT)/task \
-	-I$(PROJ_ROOT)/test \
 	-I$(PROJ_ROOT)/utils \
 	-I$(PROJ_ROOT)/vcodec \
 	-I$(KERNEL_DIR)/include \
@@ -59,8 +58,6 @@ INCLUDES       := \
 # ==============================================================================
 # 1. 应用层C代码
 APP_SRCS       := \
-    $(PROJ_ROOT)/test/test.c \
-    $(PROJ_ROOT)/test/launch_kernel_case_1.c \
     $(PROJ_ROOT)/driver/gicv3_basic.c \
     $(PROJ_ROOT)/driver/mhu_davarae.c \
     $(PROJ_ROOT)/driver/uart_pl011.c \

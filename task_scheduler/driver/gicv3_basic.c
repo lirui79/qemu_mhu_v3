@@ -200,23 +200,26 @@ uint32_t enableGIC(void)
 // ------------------------------------------------------------
 // Redistributor Functions
 // ------------------------------------------------------------
-uint32_t getRedistID(uint32_t mpidr_aff)
+
+uint32_t getRedistID(uint32_t affinity)
 {
   uint32_t index = 0;
+
+  // Check that GIC pointers are valid
   if (gic_addr_valid==0)
     return 0xFFFFFFFF;
 
 #ifdef DEBUG
-  printf("getRedistID: raw mpidr_aff=0x%08x\n", mpidr_aff);
+  printf("getRedistID: raw affinity=0x%08x\n", affinity);
 #endif
 
 #if 1
   // Cortex‑R52 适配：R核MPIDR简化，只使用Aff1/Aff0，GICR_TYPER[1]填充策略不同
-  // 根据你的仿真模型实际情况调整掩码；很多R52仿真 GICR_TYPER[1] = (mpidr_aff & 0x0000FF00U)
-  uint32_t aff_compare = mpidr_aff & 0x0000FF00U;
+  // 根据你的仿真模型实际情况调整掩码；很多R52仿真 GICR_TYPER[1] = (affinity & 0x0000FF00U)
+  uint32_t aff_compare = affinity & 0x0000FF00U;
 #else
   // original A‑core code
-  uint32_t aff_compare = mpidr_aff & 0xFFFFFF00U;
+  uint32_t aff_compare = affinity & 0xFFFFFF00U;
 #endif
 
   for(index = 0; index <= gic_max_rd; index++)

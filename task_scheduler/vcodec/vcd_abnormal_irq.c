@@ -56,7 +56,7 @@
  */
 
 
-#include "vcx_watchdog.h"
+
 #include "vcx_cmdbuf_obj.h"
 #include "vcd_abnormal_irq.h"
 
@@ -109,9 +109,6 @@ static void process_vcd_slice_irq(vcmd_mgr_t *vcmd_mgr,
 
 		obj->slice_run_done = 1;
 		proc_add_done_job(vcmd_mgr, obj);
-#ifdef SUPPORT_WATCHDOG
-		_vcmd_watchdog_stop(dev, 1);
-#endif
 	}
 }
 
@@ -124,13 +121,13 @@ void process_vcd_abn_irq(vcmd_mgr_t *vcmd_mgr,
 	struct vcmd_subsys_info *subsys = dev->subsys_info;
 
 	volatile void *hwregs;
-	unsigned long flags;
+	uint32_t   flags;
 	u32 irq;
 
 	hwregs = subsys->hwregs[SUB_MOD_MAIN];
 
 	// read VCD int_status
-	spin_lock_irqsave(&dev->abn_irq_lock, flags);
+	flags = spin_lock_irqsave(&dev->abn_irq_lock);
 	irq = (u32)ioread32((void __iomem *)(hwregs + 0x04));
 
 	if (irq & VCD_STATUS_LINE_CNT_INT) {
@@ -148,5 +145,4 @@ void process_vcd_abn_irq(vcmd_mgr_t *vcmd_mgr,
 		process_vcd_slice_irq(vcmd_mgr, dev, obj, irq);
 	}
 	spin_unlock_irqrestore(&dev->abn_irq_lock, flags);
-
 }

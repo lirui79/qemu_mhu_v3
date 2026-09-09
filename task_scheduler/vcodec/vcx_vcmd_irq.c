@@ -15,7 +15,6 @@
 *********************************************************************************/
 
 #include "vcx_kthread.h"
-#include "vcx_watchdog.h"
 #include "vcx_vcmd_irq.h"
 #include "vcx_cmdbuf_obj.h"
 #include "vcx_vcmd_dbgfs.h"
@@ -89,8 +88,6 @@ static int isr_process_node(vcmd_mgr_t *vcmd_mgr, bi_list_node *node,
 	}
 }
 
-
-#ifndef TIMEOUT_IRQ_TIMER
 /**
  * @brief reset core to the specified vcmd hw device.
  */
@@ -118,8 +115,6 @@ static void vcmd_reset_current_asic(struct hantrovcmd_dev *dev)
 						VCMD_REGISTER_EXE_CMDBUF_COUNT_OFFSET, 0x0000);
 	}
 }
-#endif
-
 
 /**
  * @brief interrupt service routine of vcmd driver.
@@ -130,7 +125,7 @@ irqreturn_t hantrovcmd_isr(int irq, void *handler)
 	vcmd_mgr_t *vcmd_mgr = (vcmd_mgr_t *)handler;
 	struct hantrovcmd_dev *dev = NULL;
 	u32 irq_status = 0;
-	unsigned long flags;
+	uint32_t   flags;
 	bi_list_node *node;
 	ptr_t exe_cmdbuf_ba;
 	u32 curr_id = 0;
@@ -163,7 +158,7 @@ irqreturn_t hantrovcmd_isr(int irq, void *handler)
 
 	hwregs = dev->hwregs;
 
-	spin_lock_irqsave(dev->spinlock, flags);
+	flags = spin_lock_irqsave(dev->spinlock);
 	if (dev->state == VCMD_STATE_POWER_OFF) {
 		spin_unlock_irqrestore(dev->spinlock, flags);
 		return IRQ_HANDLED;
@@ -320,20 +315,12 @@ irqreturn_t hantrovcmd_isr(int irq, void *handler)
 		isr_process_node(vcmd_mgr, curr_node, CMDBUF_EXE_STATUS_CMDBUF_TIMEOUT);
 		dev->kthread_actions |= KT_ACT_CMDBUF_TIMEOUT;
 		spin_unlock_irqrestore(dev->spinlock, flags);
-		_vcmd_kthread_wakeup_irq(vcmd_mgr, KT_ACT_CMDBUF_TIMEOUT);
+		//_vcmd_kthread_wakeup_irq(vcmd_mgr, KT_ACT_CMDBUF_TIMEOUT);
 		return IRQ_HANDLED;
 	}
 
 	//curr_node process
 	if (irq_status & VCMD_IRQ_ABORT) {
-#ifdef TIMEOUT_IRQ_TIMER
-		/* if vcmd abort waited, del vcmd timeout timer */
-		//_vcmd_timeout_del_timer(dev);
-        _vcmd_timeout_stop_timer(dev);
-#endif
-#ifdef SUPPORT_WATCHDOG
-		_vcmd_watchdog_stop(dev, 1);
-#endif
 		//abort error
 		dev->state = VCMD_STATE_IDLE;
 		dev->aborted_cmdbuf_id = curr_id;
@@ -361,9 +348,9 @@ irqreturn_t hantrovcmd_isr(int irq, void *handler)
 		//to notify owner which triggered the abort
 		//wake_up_interruptible_all(dev->abort_waitq);
 		{
-			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-			xSemaphoreGiveFromISR(dev->abort_waitq, &xHigherPriorityTaskWoken);
-			portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+//			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+//			xSemaphoreGiveFromISR(dev->abort_waitq, &xHigherPriorityTaskWoken);
+//			portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 		}
 
 		handled++;
@@ -384,7 +371,7 @@ irqreturn_t hantrovcmd_isr(int irq, void *handler)
 		dev->kthread_actions |= KT_ACT_HW_BUS_ERR;
 		//vcmd_start(dev, 1);
 		spin_unlock_irqrestore(dev->spinlock, flags);
-		_vcmd_kthread_wakeup_irq(vcmd_mgr, KT_ACT_HW_BUS_ERR);
+		//_vcmd_kthread_wakeup_irq(vcmd_mgr, KT_ACT_HW_BUS_ERR);
 
 		handled++;
 		return IRQ_HANDLED;
@@ -392,30 +379,17 @@ irqreturn_t hantrovcmd_isr(int irq, void *handler)
 
 	if (irq_status & VCMD_IRQ_TIMEOUT) {
 		//time out
-#ifdef TIMEOUT_IRQ_TIMER
-		if ((irq_status & VCMD_IRQ_END) == 0) {
-			// start a timer to wait abort irq
-			//_vcmd_timeout_add_timer(dev);
-            _vcmd_timeout_start_timer(dev);
-		}
-#else //TIMEOUT_IRQ_TIMER
 		//reset dev and re-start from curr node
 		dev->state = VCMD_STATE_IDLE;
 
 		vcmd_reset_current_asic(dev);
 		vcmd_start(dev, 1);
-#endif //TIMEOUT_IRQ_TIMER
 		spin_unlock_irqrestore(dev->spinlock, flags);
 
 		handled++;
 		return IRQ_HANDLED;
 	}
 	if (irq_status & VCMD_IRQ_CMD_ERR) {
-#ifdef TIMEOUT_IRQ_TIMER
-		/* if vcmd cmderr waited, del vcmd timeout timer */
-		//_vcmd_timeout_del_timer(dev);
-        _vcmd_timeout_stop_timer(dev);
-#endif
 		//command error, re-start from next node
 		dev->state = VCMD_STATE_IDLE;
 		isr_process_node(vcmd_mgr, curr_node, CMDBUF_EXE_STATUS_CMDERR);
@@ -430,18 +404,11 @@ irqreturn_t hantrovcmd_isr(int irq, void *handler)
 	//JMP or END interrupt
 	isr_process_node(vcmd_mgr, curr_node, CMDBUF_EXE_STATUS_OK);
 	if (irq_status & VCMD_IRQ_END) {
-#ifdef TIMEOUT_IRQ_TIMER
-		/* if vcmd end waited, del vcmd timeout timer */
-		//_vcmd_timeout_del_timer(dev);
-        _vcmd_timeout_stop_timer(dev);
-#endif
 		//end command interrupt, start next node
 		dev->state = VCMD_STATE_IDLE;
 		vcmd_start(dev, 1);
 	} else {
-#ifdef SUPPORT_WATCHDOG
-		_vcmd_watchdog_feed(dev, 1);
-#endif
+
 	}
 	spin_unlock_irqrestore(dev->spinlock, flags);
 	handled++;

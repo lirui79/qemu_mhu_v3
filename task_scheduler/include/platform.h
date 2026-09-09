@@ -36,6 +36,7 @@
 #define IRQ_ID_DMA_CH_5         38  //SPI-6
 #define IRQ_ID_DMA_CH_6         39  //SPI-7
 #define IRQ_ID_DMA_CH_7         40  //SPI-8
+#define IRQ_ID_DMA_COMMON       49  //SPI-17
 #define IRQ_ID_MHU_PBX_COMB     78  //SPI-46
 #define IRQ_ID_MHU_MBX_COMB     110 //SPI-78
 

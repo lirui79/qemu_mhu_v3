@@ -133,13 +133,11 @@ EL1_Vectors:
 
 EL1_Reset_Addr:     .word    EL1_Reset_Handler
 EL1_Undefined_Addr: .word    EL1_Undefined_Handler
-// SVC 槽接到 FreeRTOS 的 SWI handler:portYIELD() 通过 SWI 触发任务切换
-EL1_SVC_Addr:       .word    FreeRTOS_SWI_Handler
+EL1_SVC_Addr:       .word    EL1_SVC_Handler
 EL1_Prefetch_Addr:  .word    EL1_Prefetch_Handler
 EL1_Abort_Addr:     .word    EL1_Abort_Handler
 EL1_Reserved_Addr:  .word    EL1_Reserved
-// IRQ 槽接到 FreeRTOS 的 IRQ handler:带上下文切换,调度器才能工作
-EL1_IRQ_Addr:       .word    FreeRTOS_IRQ_Handler
+EL1_IRQ_Addr:       .word    EL1_IRQ_Handler
 EL1_FIQ_Addr:       .word    EL1_FIQ_Handler
 
 
@@ -625,3 +623,4 @@ get_cpu_id:
         ANDS r0, r0, #0xF
         pop {pc}
     .cfi_endproc
+

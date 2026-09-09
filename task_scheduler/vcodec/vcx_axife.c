@@ -54,10 +54,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
-
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 #include "vcx_axife.h"
 
 #ifdef SUPPORT_AXIFE

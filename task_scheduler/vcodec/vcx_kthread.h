@@ -23,13 +23,8 @@
 extern "C" {
 #endif
 
-void _vcmd_kthread_wakeup_irq(vcmd_mgr_t *vcmd_mgr, unsigned int value);
 
-void _vcmd_kthread_wakeup(vcmd_mgr_t *vcmd_mgr, unsigned int value);
-
-void _vcmd_kthread_create(vcmd_mgr_t *vcmd_mgr);
-
-void _vcmd_kthread_stop(vcmd_mgr_t *vcmd_mgr);
+void _vcmd_kthread_proc(vcmd_mgr_t *vcmd_mgr);
 
 
 #ifdef __cplusplus

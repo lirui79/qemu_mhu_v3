@@ -17,9 +17,7 @@
 #ifndef _VCX_CMDBUF_OBJ_H_
 #define _VCX_CMDBUF_OBJ_H_
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 
 #include "cmdef.h"
 #include "vcx_vcmd.h"

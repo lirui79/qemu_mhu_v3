@@ -73,9 +73,9 @@
  *   1. Include headers
  *------------------------------------------------------------------------------
  */
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+
+#include "osal.h" /* needed for the _IOW etc stuff used later */
+
 
 
 #ifdef __cplusplus

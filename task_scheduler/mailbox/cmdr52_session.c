@@ -14,7 +14,7 @@
 **                      include command r52 session source                      **
 *********************************************************************************/
 
-
+#include "crc32.h"
 #include "cmdr52_mgr.h"
 #include "cmdr52_proc.h"
 #include "cmdr52_session.h"
@@ -273,16 +273,16 @@ int32_t        cmdr52_session_vcodec(cmdr52_session_t *session, cmdMsg_t *cmdMsg
 }
 
 int32_t        cmdr52_session_send(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
-    int32_t code = 0;
+    uint32_t ch = 2 * ((session->sessionID & 0xFFFF0000) >> 16) + 1, snsz = 0;// 0 r52   0- channel a78 -> r52   1- channel r52 -> a78 ; 1 r52   2- channel a78 -> r52   3- channel r52 -> a78 
     cmdMsg->sessionID    = session->sessionID;
     cmdMsg->timeStamp    = 0x00000000;
-    spin_lock(&session->spinlock);
     cmdMsg->seqNum       = session->seqSNum++;
-    code = cmdr52_send(cmdMsg);
-    spin_unlock(&session->spinlock);
+    cmdMsg->crc32        = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
+    snsz                 = mhu_send_data(ch, (void*)cmdMsg, cmdMsg->cmdSize);
     cmdr52_mgr_release_cmdMsg(cmdMsg);
-    return code;
+    if (snsz != cmdMsg->cmdSize) {
+        ts_printf("Failed to send create process cmd, ret %u\n", snsz);
+        return -1;
+    }
+    return 0;
 }
-
-
-

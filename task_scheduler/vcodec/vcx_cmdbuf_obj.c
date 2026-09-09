@@ -14,13 +14,13 @@
 **                         *.c vcx cmdbuf obj source code                       **
 *********************************************************************************/
 
-#include "vcx_watchdog.h"
+
+#include "cmdr52_mgr.h"
 #include "vcx_vcmd_irq.h"
 #include "vcx_vcmd_defs.h"
 #include "vcx_cmdbuf_obj.h"
 #include "vcx_vcmd_dbgfs.h"
 #include "vcx_vcmd_dbg_log.h"
-#include "vcx_irq_simulation.h"
 
 
 /*---------------------------------------------------------------
@@ -293,7 +293,7 @@ void proc_add_done_job(vcmd_mgr_t *vcmd_mgr, struct cmdbuf_obj *obj)
 {
 	u16 id = obj->cmdbuf_id;
 	struct bi_list *list;
-	unsigned long flags;
+	uint32_t   flags;
 	u32 is_empty, is_wait;
 	struct hantrovcmd_dev *dev = NULL;
 
@@ -305,12 +305,11 @@ void proc_add_done_job(vcmd_mgr_t *vcmd_mgr, struct cmdbuf_obj *obj)
 
 	list = &vcmd_mgr->job_done_list;
 	dev = &vcmd_mgr->dev_ctx[obj->core_id];
-	if (obj->module_type == VCMD_TYPE_DECODER) {//	    wake_up_interruptible_all(&dev->buff_empty_waitq);
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		wake_up_interruptible_all_from_isr(&dev->buff_empty_waitq, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	if (obj->module_type == VCMD_TYPE_DECODER) {
+		atomic_inc(&dev->buff_empty_waitq);
 	}
-	spin_lock_irqsave(&vcmd_mgr->job_lock, flags);
+
+	flags = spin_lock_irqsave(&vcmd_mgr->job_lock);
 
 	if (vcmd_mgr->po_jobs[id].data) {
 		//already in job-done list, do nothing
@@ -323,13 +322,23 @@ void proc_add_done_job(vcmd_mgr_t *vcmd_mgr, struct cmdbuf_obj *obj)
 	is_wait = vcmd_mgr->in_wait;
 	vcmd_mgr->in_wait = 0;
 	bi_list_insert_node_tail(list, &vcmd_mgr->po_jobs[id]);
-
 	spin_unlock_irqrestore(&vcmd_mgr->job_lock, flags);
 
-	if (is_empty || is_wait) {//wake_up_interruptible_all(&po->job_waitq);
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		wake_up_interruptible_all_from_isr(&vcmd_mgr->job_waitq, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	{
+		cmdr52_mgr_t *mgr = (cmdr52_mgr_t*) cmdr52_mgr_get();
+		cmdEvtIntIrqVpu_Body_t *cmdBody = NULL;
+		cmdMsg_t *cmdMsg = NULL;
+		cmdMsg = BQueueDequeueFromISR(mgr->cmd_queue);
+		cmdBody = (cmdEvtIntIrqVpu_Body_t *)cmdMsg->data;
+		cmd_init(cmdMsg);
+		cmdMsg->cmdType = CMD_EVT_INTIRQ_VCODEC;
+		cmdMsg->cmdSize = CMD_MSG_MIN_SIZE + sizeof(cmdEvtIntIrqVpu_Body_t);// command size  (include cmd header and body)
+		cmdMsg->sessionID = 0xFFFFFFFF;// session id
+		cmdMsg->timeStamp = 0xFFFFFFFF;// time stamp, default current time in ms
+		cmdMsg->seqNum    = 0x00;
+		cmdBody->vcmdmgr_id  = vcmd_mgr->vcmd_mgr_id;
+		cmdBody->cmdbuf_id  = obj->cmdbuf_id;
+		BQueueQueueFromISR(mgr->cmd_queue, cmdMsg);
 	}
 }
 
@@ -344,11 +353,11 @@ static int proc_get_done_job(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, st
 
 	struct bi_list *list = &vcmd_mgr->job_done_list;
 	bi_list_node *node;
-	unsigned long flags;
+	uint32_t   flags;
 	struct cmdbuf_obj *obj = NULL;
 	int is_done = 0, i = 0, run_done = 0;
 
-	spin_lock_irqsave(&vcmd_mgr->job_lock, flags);
+	flags = spin_lock_irqsave(&vcmd_mgr->job_lock);
 	node = list->head;
 
 	if (node == NULL) {
@@ -414,11 +423,11 @@ static int vcmd_get_done_job(vcmd_mgr_t *vcmd_mgr, struct cmdbuf_obj **pobj)
 
 	struct bi_list *list = &vcmd_mgr->job_done_list;
 	bi_list_node *node;
-	unsigned long flags;
+	uint32_t   flags;
 	struct cmdbuf_obj *obj = NULL;
 	int is_done = 0, i = 0, run_done = 0;
 
-	spin_lock_irqsave(&vcmd_mgr->job_lock, flags);
+	flags = spin_lock_irqsave(&vcmd_mgr->job_lock);
 	node = list->head;
 
 	if (node == NULL) {
@@ -754,9 +763,6 @@ void vcmd_start(struct hantrovcmd_dev *dev, int irq)
 
 	if (dev->sw_cmdbuf_rdy_num == 0 || node == NULL) {
 		vcmd_klog(LOGLVL_BRIEF, "%s: no cmdbuf to start yet!\n", __func__);
-#ifdef SUPPORT_WATCHDOG
-		_vcmd_watchdog_stop(dev, irq);
-#endif
 		return;
 	}
 
@@ -911,10 +917,6 @@ void vcmd_start(struct hantrovcmd_dev *dev, int irq)
 	vcmd_write_reg(hwregs, VCMD_REGISTER_CONTROL_OFFSET,
 		reg_mirror[VCMD_REGISTER_CONTROL_OFFSET / 4]);
 
-#ifdef SUPPORT_WATCHDOG
-	_vcmd_watchdog_feed(dev, irq);
-#endif
-
 #ifdef VCMD_DEBUG_INTERNAL
 	printk_vcmd_register_debug(hwregs, "vcmd start exits");
 #endif
@@ -927,22 +929,22 @@ void vcmd_start(struct hantrovcmd_dev *dev, int irq)
  */
 int vcmd_abort(vcmd_mgr_t *vcmd_mgr, struct hantrovcmd_dev *dev, u32 *aborted_id)
 {
-	unsigned long flags = 0;
+	uint32_t   flags;
 	u32 cnt = 100000, irq;
 
-	spin_lock_irqsave(dev->spinlock, flags);
+	flags = spin_lock_irqsave(dev->spinlock);
 	vcmd_write_register_value((const void *)dev->hwregs,
 								dev->reg_mirror,
 								HWIF_VCMD_START_TRIGGER, 0);
 	spin_unlock_irqrestore(dev->spinlock, flags);
 	if (vcodec_get_config()->vcmd_isr_polling == 0) {
-	    BaseType_t retCode = wait_event_interruptible(*dev->abort_waitq, (dev->state == VCMD_STATE_IDLE));
-		if (retCode == pdFALSE) {
-			vcmd_klog(LOGLVL_ERROR, "%s: abort_waitq is signaled, continue to wait vcmd aborted!!!\n", __func__);
-			goto isr_polling;
-		} else {
-			goto out;
-		}
+//	    BaseType_t retCode = wait_event_interruptible(*dev->abort_waitq, (dev->state == VCMD_STATE_IDLE));
+//		if (retCode == pdFALSE) {
+//			vcmd_klog(LOGLVL_ERROR, "%s: abort_waitq is signaled, continue to wait vcmd aborted!!!\n", __func__);
+//			goto isr_polling;
+//		} else {
+//			goto out;
+//		}
 	}
 
 isr_polling:
@@ -951,7 +953,7 @@ isr_polling:
 
 	while (cnt--) {
 		//(100, 120);
-        vTaskDelay(pdMS_TO_TICKS(5)); 
+//        vTaskDelay(pdMS_TO_TICKS(5)); 
 		hantrovcmd_isr(irq, vcmd_mgr);
 		if (dev->state == VCMD_STATE_IDLE) {
 			cnt += 1;
@@ -987,7 +989,7 @@ static int select_vcmd(vcmd_mgr_t *vcmd_mgr, bi_list_node *new_node)
 	u32 reg_id_exe;
 
 	u32 cmdbuf_id, i, devID = 0;
-	unsigned long flags = 0;
+	uint32_t   flags;
 	ptr_t curr_exe_addr;
 	int ret;
 
@@ -1005,7 +1007,7 @@ static int select_vcmd(vcmd_mgr_t *vcmd_mgr, bi_list_node *new_node)
 			continue;
 
 		list = &dev->work_list;
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		if (!list->tail ||
 			((struct cmdbuf_obj *)list->tail->data)->cmdbuf_run_done) {
 			dev_add_job(dev, new_node);
@@ -1057,7 +1059,7 @@ static int select_vcmd(vcmd_mgr_t *vcmd_mgr, bi_list_node *new_node)
 			curr_node = &vcmd_mgr->nodes[cmdbuf_id];
 		}
 
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		if (!curr_node)
 			curr_node = list->head;
 		//calculate total workload of this device
@@ -1079,7 +1081,7 @@ static int select_vcmd(vcmd_mgr_t *vcmd_mgr, bi_list_node *new_node)
 	list = &smallest_dev->work_list;
 	if (obj->priority == CMDBUF_PRIORITY_NORMAL) {
 		//insert to tail
-		spin_lock_irqsave(smallest_dev->spinlock, flags);
+		flags = spin_lock_irqsave(smallest_dev->spinlock);
 		dev_add_job(smallest_dev, new_node);
 		spin_unlock_irqrestore(smallest_dev->spinlock, flags);
 		return 0;
@@ -1095,7 +1097,7 @@ static int select_vcmd(vcmd_mgr_t *vcmd_mgr, bi_list_node *new_node)
 	// need to select inserting position again
 	// because hw maybe have run to the next node.
 	// CMDBUF_PRIORITY_HIGH
-	spin_lock_irqsave(smallest_dev->spinlock, flags);
+	flags = spin_lock_irqsave(smallest_dev->spinlock);
 	curr_node = &vcmd_mgr->nodes[cmdbuf_id];
 	if (smallest_dev->abort_mode == 0)
 		curr_node = curr_node->next;
@@ -1175,7 +1177,7 @@ int32_t vcmd_release_cmdbuf(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id)
 {
 	struct cmdbuf_obj *obj = NULL;
 	bi_list_node *curr_node = NULL;
-	unsigned long flags;
+	uint32_t   flags;
 	struct hantrovcmd_dev *dev = NULL;
 
 	if (cmdbuf_id >= SLOT_NUM_CMDBUF) {
@@ -1197,7 +1199,7 @@ int32_t vcmd_release_cmdbuf(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id)
 		dev = &vcmd_mgr->dev_ctx[obj->core_id];
 
 		return_process_resource(obj->session, obj);
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		dev_remove_job(vcmd_mgr, dev, curr_node);
 		spin_unlock_irqrestore(dev->spinlock, flags);
 	}
@@ -1216,7 +1218,7 @@ long link_and_run_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, struct
 	bi_list_node *curr_node;
 
 	struct hantrovcmd_dev *dev = NULL;
-	unsigned long flags;
+	uint32_t   flags;
 	int ret;
 	u16 cmdbuf_id = param->cmdbuf_id;
 	u16 batchcount = ((param->interrupt_ctrl >> 32) & 0xff);
@@ -1276,7 +1278,7 @@ long link_and_run_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, struct
 			  cmdbuf_id, param->core_id);
 
 	//start to run
-	spin_lock_irqsave(dev->spinlock, flags);
+	flags = spin_lock_irqsave(dev->spinlock);
 	if (dev->state != VCMD_STATE_WORKING) {
 		//start vcmd
 		vcmd_start(dev, 0);
@@ -1296,9 +1298,6 @@ long link_and_run_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, struct
 										dev->reg_mirror,
 										HWIF_VCMD_RDY_CMDBUF_COUNT,
 										dev->sw_cmdbuf_rdy_num);
-#ifdef SUPPORT_WATCHDOG
-			_vcmd_watchdog_feed(dev, 0);
-#endif
 		}
 	}
 
@@ -1320,7 +1319,7 @@ int32_t vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session
 	bi_list_node *curr_node;
 
 	struct hantrovcmd_dev *dev = NULL;
-	unsigned long flags;
+	uint32_t   flags;
 	int ret;
 	uint16_t cmdbuf_id = cmd_body->cmdbuf_id;
 	uint16_t batchcount = ((cmd_body->interrupt_ctrl >> 32) & 0xff);
@@ -1380,7 +1379,7 @@ int32_t vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session
 			  cmdbuf_id, cmd_body->core_id);
 
 	//start to run
-	spin_lock_irqsave(dev->spinlock, flags);
+	flags = spin_lock_irqsave(dev->spinlock);
 	if (dev->state != VCMD_STATE_WORKING) {
 		//start vcmd
 		vcmd_start(dev, 0);
@@ -1400,9 +1399,6 @@ int32_t vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session
 										dev->reg_mirror,
 										HWIF_VCMD_RDY_CMDBUF_COUNT,
 										dev->sw_cmdbuf_rdy_num);
-#ifdef SUPPORT_WATCHDOG
-			_vcmd_watchdog_feed(dev, 0);
-#endif
 		}
 	}
 
@@ -1420,10 +1416,27 @@ int32_t vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session
 	obj->core_id        = 0;
 	cmd_body->core_id = obj->core_id;
 
-	spin_lock_irqsave(&vcmd_mgr->job_lock, flags);
+	flags = spin_lock_irqsave(&vcmd_mgr->job_lock);
     obj->cmdbuf_run_done = 1;
 	spin_unlock_irqrestore(&vcmd_mgr->job_lock, flags);
-	proc_add_done_job(vcmd_mgr, obj);
+//	proc_add_done_job(vcmd_mgr, obj);
+    {
+		cmdr52_mgr_t *mgr = (cmdr52_mgr_t*) cmdr52_mgr_get();
+		cmdEvtIntIrqVpu_Body_t *cmdBody = NULL;
+		cmdMsg_t *cmdMsg = NULL;
+		cmdMsg = BQueueDequeue(mgr->cmd_queue);
+		cmdBody = (cmdEvtIntIrqVpu_Body_t *)cmdMsg->data;
+		cmd_init(cmdMsg);
+		cmdMsg->cmdType = CMD_EVT_INTIRQ_VCODEC;
+		cmdMsg->cmdSize = CMD_MSG_MIN_SIZE + sizeof(cmdEvtIntIrqVpu_Body_t);// command size  (include cmd header and body)
+		cmdMsg->sessionID = 0xFFFFFFFF;// session id
+		cmdMsg->timeStamp = 0xFFFFFFFF;// time stamp, default current time in ms
+		cmdMsg->seqNum    = 0x00;
+		cmdBody->vcmdmgr_id  = vcmd_mgr->vcmd_mgr_id;
+		cmdBody->cmdbuf_id  = obj->cmdbuf_id;
+		BQueueQueue(mgr->cmd_queue, cmdMsg);
+	}
+
 #endif
 	return 0;
 }
@@ -1443,10 +1456,10 @@ int32_t vcmd_wait_cmdbuf_ready(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id, u16 *done_id
         obj = &vcmd_mgr->objs[cmdbuf_id];
 	}
 
-	errCode = wait_event_interruptible(vcmd_mgr->job_waitq, vcmd_get_done_job(vcmd_mgr, &obj));
-	if (errCode == pdFALSE) {
-		return -ERESTARTSYS;
-	}
+//	errCode = wait_event_interruptible(vcmd_mgr->job_waitq, vcmd_get_done_job(vcmd_mgr, &obj));
+//	if (errCode == pdFALSE) {
+//		return -ERESTARTSYS;
+//	}
 
 	*done_id = obj->cmdbuf_id;
 	if (obj->cmdbuf_run_done == 1) {
@@ -1563,13 +1576,24 @@ int abort_vcd(volatile u8 *reg_base)
  */
 u32 vcmd_abort_mode_set(vcmd_mgr_t *vcmd_mgr, struct hantrovcmd_dev *dev, struct cmdbuf_obj *obj)
 {
-	unsigned long flags;
+	uint32_t   flags;
 
 	/* abort for slice decoding */
 	if (!obj->cmdbuf_run_done && !obj->slice_run_done) { 	
-		wait_event_interruptible_timeout(dev->buff_empty_waitq, obj->cmdbuf_run_done || obj->slice_run_done, pdMS_TO_TICKS(ONE_SLICE_WAIT_TIME));
+        uint64_t  timeout = arch_get_time_ms() + ONE_SLICE_WAIT_TIME;
+		while(1) {
+			if ((atomic_get(&dev->buff_empty_waitq) > 0) ||
+				(time_after(timeout))) {
+				break;
+			}
+		}
+
+		if (atomic_get(&dev->buff_empty_waitq) > 0) {
+			atomic_dec(&dev->buff_empty_waitq);
+		}
 	}
-	spin_lock_irqsave(dev->spinlock, flags);
+
+	flags = spin_lock_irqsave(dev->spinlock);
 	if (!obj->cmdbuf_run_done && obj->slice_run_done) {
 		/* abort vcmd by immediate mode */
 		dev->abort_mode = 0x1;
@@ -1603,18 +1627,12 @@ int32_t vcmd_flush_slice_regs(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id)
 {
 	struct hantrovcmd_dev *dev = NULL;
 	struct cmdbuf_obj *obj = NULL;
-	unsigned long flags;
+	uint32_t   flags;
 	obj = &vcmd_mgr->objs[cmdbuf_id];
 	dev = &vcmd_mgr->dev_ctx[obj->core_id];
-	spin_lock_irqsave(&dev->abn_irq_lock, flags);
+	flags = spin_lock_irqsave(&dev->abn_irq_lock);
 	obj->slice_run_done = 0;
 	spin_unlock_irqrestore(&dev->abn_irq_lock, flags);
-
-#ifdef SUPPORT_WATCHDOG
-	spin_lock_irqsave(dev->spinlock, flags);
-	_vcmd_watchdog_feed(dev, 0);
-	spin_unlock_irqrestore(dev->spinlock, flags);
-#endif
 
 	vcmd_write_reg((const void *)dev->hwregs,  VCMD_REGISTER_EXT_INT_GATE_OFFSET, dev->intr_gate_mask);
 
@@ -1649,7 +1667,7 @@ int32_t vcmd_abort_cmdbuf(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id)
 	bi_list_node *node = NULL;
 	volatile u8 *hwregs;
 	u16  reg_id_exe;
-	unsigned long flags;
+	uint32_t   flags;
 
 	node = &vcmd_mgr->nodes[cmdbuf_id];
 	obj = (struct cmdbuf_obj *)node->data;
@@ -1658,7 +1676,7 @@ int32_t vcmd_abort_cmdbuf(vcmd_mgr_t *vcmd_mgr, u16 cmdbuf_id)
 	hwregs = dev->subsys_info->hwregs[SUB_MOD_MAIN];
 	reg_id_exe = (u16)(*(dev->reg_mem_va + REG_ID2_CMDBUF_EXE_ID));
 	if (cmdbuf_id == reg_id_exe) {
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		abort_vcd(hwregs);
 		spin_unlock_irqrestore(dev->spinlock, flags);
 	} else {
@@ -1678,7 +1696,7 @@ int32_t vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_
 
 	u32 i, handled, to_drop;
 	u32 has_work_node, vcmd_aborted, aborted_cmdbuf_id;
-	unsigned long flags;
+	uint32_t   flags;
 //	int ;
 	long dropped_cmdbuf_num = 0;
 
@@ -1694,7 +1712,7 @@ int32_t vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_
 		has_work_node = 0;
 		vcmd_aborted = 0;
 
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		node = list->head;
 		while (node) {
 			obj = (struct cmdbuf_obj *)node->data;
@@ -1717,7 +1735,7 @@ int32_t vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_
 				vcmd_abort_mode_set(vcmd_mgr, dev, obj);
 				vcmd_abort(vcmd_mgr, dev, &aborted_cmdbuf_id);
 
-				spin_lock_irqsave(dev->spinlock, flags);
+				flags = spin_lock_irqsave(dev->spinlock);
 				if (dev->abort_mode == 1)
 					dev->abort_mode = 0;
 				if (dev->state != VCMD_STATE_IDLE) {
@@ -1758,7 +1776,7 @@ int32_t vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_
 
 	if ((ownerID != 0x00) && handled) {
 		dropped_cmdbuf_num = handled;
-		wake_up_interruptible_all(&vcmd_mgr->job_waitq);
+//		wake_up_interruptible_all(&vcmd_mgr->job_waitq);
 	}
 
 	cmd_body->cmdbuf_num = dropped_cmdbuf_num;

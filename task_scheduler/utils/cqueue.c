@@ -1,4 +1,4 @@
-/********************************************************************************* 
+/*********************************************************************************
 **       This software is confidential and proprietary and may be used          **
 **        only as expressly authorized by a licensing agreement from            **
 **                                                                              **
@@ -17,10 +17,11 @@
 
 #include "cqueue.h"
 #include "ddr_mem.h"
+#include "spinlock.h"
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+
+#include "osal.h" /* needed for the _IOW etc stuff used later */
+
 
 typedef struct {
     uint8_t*    data;
@@ -29,7 +30,7 @@ typedef struct {
     uint32_t    qSize;
     uint32_t    count;
     uint32_t    iSize;
-    spinlock_t  spinlock;
+    spinlock    spinlock;
 } CQueue_t;
 
 
@@ -39,7 +40,7 @@ CQueueHandle_t CQueueCreate(uint32_t qSize, uint32_t iSize) {
         return NULL;
     }
 
-    queue = (CQueue_t*)vmalloc(sizeof(CQueue_t));
+    queue = (CQueue_t*)ddr_alloc(sizeof(CQueue_t));
     if (queue == NULL) {
         return NULL;
     }
@@ -52,7 +53,7 @@ CQueueHandle_t CQueueCreate(uint32_t qSize, uint32_t iSize) {
      * 是内存大头,必须走 DDR,避免耗尽本地 RAM FreeRTOS 堆) */
     queue->data  = (uint8_t*)ddr_alloc(qSize * iSize);
     if (queue->data == NULL) {
-        vfree(queue);
+        ddr_free(queue);
         return NULL;
     }
     spin_lock_init(&queue->spinlock);
@@ -67,7 +68,7 @@ void CQueueDelete(CQueueHandle_t handle) {
     if (queue->data != NULL) {
         ddr_free(queue->data);
     }
-    vfree(queue);
+    ddr_free(queue);
 }
 
 uint32_t  CQueueCapacity(CQueueHandle_t handle) {
@@ -79,7 +80,7 @@ uint32_t  CQueueCapacity(CQueueHandle_t handle) {
     return queue->qSize;
 }
 
-uint32_t  CQueueLength(CQueueHandle_t handle) {
+uint32_t  CQueueSize(CQueueHandle_t handle) {
     uint32_t    count = 0;
     CQueue_t* queue = (CQueue_t*)handle;
     if (queue == NULL) {
@@ -145,8 +146,8 @@ void*     CQueuePeek(CQueueHandle_t handle) {
 
 int32_t  CQueueEnqueueFromISR(CQueueHandle_t handle, void* item) {
     CQueue_t* queue = (CQueue_t*)handle;
-	unsigned long flags;
-	spin_lock_irqsave(&queue->spinlock, flags);
+	uint32_t flags;
+	flags = spin_lock_irqsave(&queue->spinlock);
     if ((queue == NULL) || (queue->count >= queue->qSize)) {
 		spin_unlock_irqrestore(&queue->spinlock, flags);
         return -1;
@@ -161,8 +162,8 @@ int32_t  CQueueEnqueueFromISR(CQueueHandle_t handle, void* item) {
 void*     CQueueDequeueFromISR(CQueueHandle_t handle) {
     CQueue_t* queue = (CQueue_t*)handle;
     void *item = NULL;
-	unsigned long flags;
-	spin_lock_irqsave(&queue->spinlock, flags);
+	uint32_t flags;
+	flags = spin_lock_irqsave(&queue->spinlock);
     if ((queue == NULL) || (queue->count <= 0)) {
 		spin_unlock_irqrestore(&queue->spinlock, flags);
         return NULL;
@@ -177,8 +178,8 @@ void*     CQueueDequeueFromISR(CQueueHandle_t handle) {
 void*     CQueuePeekFromISR(CQueueHandle_t handle) {
     CQueue_t* queue = (CQueue_t*)handle;
     void *item = NULL;
-	unsigned long flags;
-	spin_lock_irqsave(&queue->spinlock, flags);
+    uint32_t flags;
+	flags = spin_lock_irqsave(&queue->spinlock);
     if ((queue == NULL) || (queue->count <= 0)) {
 		spin_unlock_irqrestore(&queue->spinlock, flags);
         return NULL;

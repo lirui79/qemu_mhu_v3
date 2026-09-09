@@ -1,4 +1,4 @@
-/********************************************************************************* 
+/*********************************************************************************
 **       This software is confidential and proprietary and may be used          **
 **        only as expressly authorized by a licensing agreement from            **
 **                                                                              **
@@ -18,9 +18,8 @@
 #include "bqueue.h"
 #include "ddr_mem.h"
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+#include "osal.h" /* needed for the _IOW etc stuff used later */
+
 
 typedef struct {
     uint8_t*        data;
@@ -39,7 +38,7 @@ BQueueHandle_t BQueueCreate(uint32_t qSize, uint32_t iSize) {
         return NULL;
     }
 
-    queue = (BQueue_t*)vmalloc(sizeof(BQueue_t));
+    queue = (BQueue_t*)ddr_alloc(sizeof(BQueue_t));
     if (queue == NULL) {
         return NULL;
     }
@@ -50,19 +49,19 @@ BQueueHandle_t BQueueCreate(uint32_t qSize, uint32_t iSize) {
      * (BQueue 结构体/TCB 等小对象仍走 vmalloc) */
     queue->data  = (uint8_t*)ddr_alloc(qSize * iSize);
     if (queue->data == NULL) {
-        vfree(queue);
+        ddr_free(queue);
         return NULL;
     }
 
     queue->free  = CQueueCreate(qSize,  sizeof(uint8_t*));
     if (queue->free == NULL) {
-        vfree(queue);
+        ddr_free(queue);
         return NULL;
     }
     queue->queue  = CQueueCreate(qSize, sizeof(uint8_t*));
     if (queue->queue == NULL) {
         CQueueDelete(queue->free);
-        vfree(queue);
+        ddr_free(queue);
         return NULL;
     }
 
@@ -84,10 +83,10 @@ void BQueueDelete(BQueueHandle_t handle) {
     if (queue->data != NULL) {
         ddr_free(queue->data);
     }
-    vfree(queue);
+    ddr_free(queue);
 }
 
-uint32_t  BQueueSize(BQueueHandle_t handle) {
+uint32_t  BQueueCapacity(BQueueHandle_t handle) {
     BQueue_t* queue = (BQueue_t*)handle;
     if (queue == NULL) {
         return 0;
@@ -95,12 +94,12 @@ uint32_t  BQueueSize(BQueueHandle_t handle) {
     return queue->qSize;
 }
 
-uint32_t  BQueueLength(BQueueHandle_t handle) {
+uint32_t  BQueueSize(BQueueHandle_t handle) {
     BQueue_t* queue = (BQueue_t*)handle;
     if (queue == NULL) {
         return 0;
     }
-    return CQueueLength(queue->queue);
+    return CQueueSize(queue->queue);
 }
 
 

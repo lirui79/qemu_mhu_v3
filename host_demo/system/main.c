@@ -8,7 +8,6 @@
 
 #include "system.h"
 #include "gicv3_basic.h"
-#include "ts_protocol.h"
 #include "vcodec.h"
 #include "vcodec_test.h"
 
@@ -65,85 +64,6 @@ static inline int get_current_el(void)
     uint64_t current_el;
     __asm__ volatile("MRS %0, CurrentEL" : "=r" (current_el));
     return (int)(current_el >> 2) & 0x3;
-}
-
-/* query TS information */
-static int query_ts_info(void)
-{
-    ts_cmd_query query;
-    ts_data_hw_info hw_info;
-    ts_data_sw_info sw_info;
-    uint32_t len;
-
-    query.header     = TS_HDR_MAKE(TS_CMD_CODE_QUERY, 0, TS_PACKET_LEN(ts_cmd_query));
-    query.type_param = (uint32_t)TS_QUERY_TYPE_HW;  /* type:8, param:24=0 */
-
-    /* clear FC status before sending query to avoid stale event */
-    {
-        unsigned long flags = arch_local_irq_save();
-        g_mbx_fc_stat_0 = 0;
-        arch_local_irq_restore(flags);
-    }
-
-    ts_printf("SEND QUERY HW type=%u\n", (uint8_t)(query.type_param & 0xFF));
-    len = mhu_send_data(0, &query, sizeof(ts_cmd_query));
-    if (len != sizeof(ts_cmd_query)) {
-        ts_printf("failed to send query cmd, ret %u\n", len);
-        return -1;
-    }
-    ts_printf("WAIT FC for HW info...\n");
-    /* Re-check before WFI to avoid losing interrupt that arrived
-     * between clearing g_mbx_fc_stat_0 and entering WFI */
-    while (!MHU_FC_SIGNALED) {
-        __asm__ volatile("wfi" : : : "memory");
-    }
-    ts_printf("GOT FC HW, reading...\n");
-    len = mhu_recv_data(1, &hw_info, sizeof(hw_info));
-    if (len != sizeof(hw_info)) {
-        ts_printf("failed to receive hw info, ret %u\n", len);
-        return -1;
-    }
-
-    query.header     = TS_HDR_MAKE(TS_CMD_CODE_QUERY, 0, TS_PACKET_LEN(ts_cmd_query));
-    query.type_param = (uint32_t)TS_QUERY_TYPE_SW;  /* type:8, param:24=0 */
-
-    /* clear FC status before sending query to avoid stale event */
-    {
-        unsigned long flags = arch_local_irq_save();
-        g_mbx_fc_stat_0 = 0;
-        arch_local_irq_restore(flags);
-    }
-
-    len = mhu_send_data(0, &query, sizeof(ts_cmd_query));
-    if (len != sizeof(ts_cmd_query)) {
-        ts_printf("failed to send query cmd, ret %u\n", len);
-        return -1;
-    }
-    while (!MHU_FC_SIGNALED) {
-        __asm__ volatile("wfi" : : : "memory");
-    }
-    len = mhu_recv_data(1, &sw_info, sizeof(sw_info));
-    if (len != sizeof(sw_info)) {
-        ts_printf("failed to receive hw info, ret %u\n", len);
-        return -1;
-    }
-
-    ts_printf("<TS HW INFO>\n");
-    ts_printf("  vendor id      : 0x%x\n",     (uint16_t)(hw_info.vendor_device & 0xFFFF));
-    ts_printf("  device id      : 0x%x\n",     (uint16_t)(hw_info.vendor_device >> 16));
-    ts_printf("  sm count       : %u\n",       (uint8_t)(hw_info.sm_config & 0xFF));
-    ts_printf("  core per sm    : %u\n",       (uint8_t)((hw_info.sm_config >> 8) & 0xFF));
-    ts_printf("  warp size      : %u\n",       (uint8_t)((hw_info.sm_config >> 16) & 0xFF));
-    ts_printf("  warp per core  : %u\n",       (uint8_t)((hw_info.sm_config >> 24) & 0xFF));
-    ts_printf("  smem size      : %u bytes\n", hw_info.smem_size);
-    ts_printf("  l2 cache size  : %u bytes\n", hw_info.l2_cache_size);
-    ts_printf("  l1 dcache size : %u bytes\n", hw_info.l1_dcache_size);
-    ts_printf("  l1 icache size : %u bytes\n", hw_info.l1_icache_size);
-
-    ts_printf("<TS SW INFO>\n");
-    ts_printf("  fw version     : 0x%x\n", sw_info.ts_fw_version);
-
-    return 0;
 }
 
 /*
@@ -234,12 +154,6 @@ void boot_main(void)
     /* wait for TS to start */
     mhu_wait_event(0, MHU_DB0_EVENT_TS_STARTUP);
     ts_printf("TS started\n");
-
-    /* query ts information */
-//    query_ts_info();
-
-    /* run tests */
-//    run_test();
 
     /* Create demo tasks */
 /*

@@ -55,9 +55,7 @@
  *
  ********************************************************************************
  */
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 
 #include "vcx_axi2to1.h"
 
@@ -161,7 +159,7 @@ void process_axi2to1_abn_irq(vcmd_mgr_t *vcmd_mgr, struct hantrovcmd_dev *dev)
 	struct vcmd_subsys_info *subsys = dev->subsys_info;
 
 	volatile void *hwregs;
-	unsigned long flags;
+	uint32_t   flags;
 	u32 irq;
 
 	hwregs = subsys->hwregs[SUB_MOD_AXI2TO1];
@@ -169,12 +167,12 @@ void process_axi2to1_abn_irq(vcmd_mgr_t *vcmd_mgr, struct hantrovcmd_dev *dev)
 	irq = (u32)ioread32((void __iomem *)(hwregs + AXI2TO1_REG5_SW_IRQ)); //axi2to irq status
 	/* bit0: flush done and bit1: flush timeout will be triggerd by flush operation */
 	if (irq & 0xFFFFFFFC) {
-		spin_lock_irqsave(&dev->abn_irq_lock, flags);
+		flags = spin_lock_irqsave(&dev->abn_irq_lock);
 		/* clear axi2to1 irq */
 		iowrite32(irq, (void __iomem *)(hwregs + AXI2TO1_REG5_SW_IRQ));
 		dev->kthread_actions |= KT_ACT_AXI2TO1_EXCEPTION;
 		spin_unlock_irqrestore(&dev->abn_irq_lock, flags);
-		_vcmd_kthread_wakeup_irq(vcmd_mgr, KT_ACT_AXI2TO1_EXCEPTION);
+		//_vcmd_kthread_wakeup_irq(vcmd_mgr, KT_ACT_AXI2TO1_EXCEPTION);
 	}
 }
 

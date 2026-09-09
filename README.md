@@ -72,7 +72,7 @@ sudo apt-get install -y gdb-multiarch
 `task_scheduler` 是 Cortex-R52 双核任务调度器固件:
 
 - core 0 入口函数为 `main`, 使用 UART0 输出日志并运行命令处理器 `command_processor`
-- core 1 入口函数为 `main_core1`, 使用 UART1 输出日志并运行自己的任务(如 `core1_demo_task`)
+- core 1 入口函数为 `main_core1`, 使用 UART1 输出日志并运行任务调度器 `task_scheduler`
 - `ts_printf` 会根据 CPU ID 自动选择对应 UART
 
 AMP(每核独立 FreeRTOS 实例):
@@ -250,7 +250,11 @@ killall cortex-r52-a76-vp
 Linux 环境支持一键编译并运行脚本:
 
 ```bash
+# 自动编译相关固件并运行
 ./linux_a76/scripts/run_linux_demo.sh
+
+# 或直接运行
+./simulation/run_linux.sh
 ```
 
 生成文件位于 `linux_a76/build` 目录. 日志输出位置：
@@ -285,12 +289,30 @@ sequence=1 completed in 585 us
 ~ #
 ```
 
+#### 手动编译
+
+编译 R52 固件:
+
+```sh
+make -C task_scheduler clean all
+```
+
+编译 Linux 固件:
+
+```sh
+make -C linux_a76 KERNEL_SRC="${PWD}/linux-6.8" KERNEL_BUILD="${PWD}/linux_a76/build/kernel" all
+```
+
 #### GDB 调试
 
 执行脚本:
 
 ```bash
+# 自动编译相关固件并运行
 ./linux_a76/scripts/run_linux_gdb.sh
+
+# 或直接运行:
+./simulation/run_linux_gdb.sh
 ```
 
 在其他终端连接目标：

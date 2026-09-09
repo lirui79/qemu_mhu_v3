@@ -60,9 +60,7 @@
 #ifndef _VCX_VCMD_DBGFS_H_
 #define _VCX_VCMD_DBGFS_H_
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 
 #ifdef __cplusplus
 extern "C" {

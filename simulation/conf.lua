@@ -161,7 +161,7 @@ platform = {
         moduletype = "Pl011",
         dylib_path = "uart-pl011",
         target_socket = {address = A76_UART0_BASE, size = A76_UART0_SIZE, bind = "&router.initiator_socket"},
-        --irq = {bind = "&plugin_1.initiator_signal_socket_0"},
+        --irq = {bind = "&plugin_1.initiator_signal_socket_2"},
         backend_socket = {bind = "&charbackend_stdio_0.biflow_socket"},
     },
 

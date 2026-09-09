@@ -29,16 +29,16 @@ int vcmd_vce_pm_suspend(void *handler)
 	struct hantrovcmd_dev *dev;
 	u32 aborted_id;
 	int i;
-	unsigned long flags;
+	uint32_t   flags;
 
 	for (i = 0; i < vcmd_mgr->subsys_num; i++) {
 		dev = &vcmd_mgr->dev_ctx[i];
 
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		if (dev->state == VCMD_STATE_WORKING) {
 			spin_unlock_irqrestore(dev->spinlock, flags);
 			vcmd_abort(vcmd_mgr, dev, &aborted_id);
-			spin_lock_irqsave(dev->spinlock, flags);
+			flags = spin_lock_irqsave(dev->spinlock);
 			if (dev->state != VCMD_STATE_IDLE) {
 				vcmd_klog(LOGLVL_ERROR, "suspend failed for dev [%d].", dev->core_id);
 				return -EBUSY;
@@ -58,7 +58,7 @@ int vcmd_vce_pm_resume(void *handler)
 	vcmd_mgr_t *vcmd_mgr = (vcmd_mgr_t *)handler;
 	struct hantrovcmd_dev *dev;
 	int i;
-	unsigned long flags;
+	uint32_t   flags;
 
 #ifdef SUPPORT_AXIFE
 	struct vcmd_subsys_info *subsys;
@@ -78,7 +78,7 @@ int vcmd_vce_pm_resume(void *handler)
 
 	for (i = 0; i < vcmd_mgr->subsys_num; i++) {
 		dev = &vcmd_mgr->dev_ctx[i];
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		if (dev->state == VCMD_STATE_POWER_OFF) {
 			dev->state = VCMD_STATE_POWER_ON;
 			vcmd_start(dev, 0);

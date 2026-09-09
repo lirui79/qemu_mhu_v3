@@ -49,10 +49,10 @@ static cmdnode_t *cmdsession_search_cmdnode(cmda78_session_t *session, uint32_t 
     cmdnode_t *cnode = NULL;
     spin_lock(&session->spinlock);
     cnode = cmdnode_search(&session->cmdroot, ackNum);
+    spin_unlock(&session->spinlock);
     if (cnode != NULL) {
         kref_get(&cnode->refcount);
     }
-    spin_unlock(&session->spinlock);
     return cnode;
 }
 
@@ -60,7 +60,7 @@ static int32_t cmdsession_wake_up_all(cmdnode_t *cnode, cmdMsg_t *cmdMsg) {
     int32_t  retCode = CMD_ERR_SUCCESS;
     cnode->cmdMsg = cmdMsg;
     retCode = cnode->code;
-	wake_up_interruptible_all(&cnode->wait);
+    wake_up_interruptible_all(&cnode->wait);
     cmdnode_free(cnode);
     return retCode;
 }
@@ -75,6 +75,7 @@ static int32_t cmd_system_open_session(cmda78_session_t *session, cmdMsg_t *cmdM
     cmd_session = cmda78_get_session(cmdBody->sessionID);
     cnode = cmdsession_search_cmdnode(session, cmdBody->ackNum);
     if (cnode == NULL) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_ACKNUM;
     }
 
@@ -88,12 +89,10 @@ static int32_t cmd_system_open_session(cmda78_session_t *session, cmdMsg_t *cmdM
             cmd_session->proc = proc;
             cmd_session->status  = CMD_SESSION_STATUS_RUN;
             if (cmd_session != session) {
-                //ts_printf("++++++++++++%s:%s:%d %d ptr=%08x %x  proc=%08x++++++++++++\n", __FILE__, __func__, __LINE__, cnode->code, (uint32_t)(uintptr_t)session, cmdBody->sessionID, (uint32_t)(uintptr_t)cmd_session);
                 cmd_session->seqRNum = 0x00;// sequence number, from 0 to 0xFFFFFFFF
                 ts_printf("++++++++++++%s:%s:%d %d ptr=%08x %x  proc=%08x++++++++++++\n", __FILE__, __func__, __LINE__, cnode->code, (uint32_t)(uintptr_t)session, cmdBody->sessionID, (uint32_t)(uintptr_t)cmd_session);
                 cmd_session->seqSNum = 0x00;// sequence number, from 0 to 0xFFFFFFFF
-                //ts_printf("++++++++++++%s:%s:%d %d ptr=%08x %x  proc=%08x++++++++++++\n", __FILE__, __func__, __LINE__, cnode->code, (uint32_t)(uintptr_t)session, cmdBody->sessionID, (uint32_t)(uintptr_t)cmd_session);
-                }
+            }
             spin_unlock(&cmd_session->spinlock);
         } else {
             cnode->code = CMD_ERR_INVALID_SESSIONID;
@@ -116,6 +115,7 @@ static int32_t cmd_system_close_session(cmda78_session_t *session, cmdMsg_t *cmd
     cmd_session = cmda78_get_session(cmdBody->sessionID);
     cnode = cmdsession_search_cmdnode(session, cmdBody->ackNum);
     if (cnode == NULL) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_ACKNUM;
     }
 
@@ -172,6 +172,7 @@ int32_t        cmda78_session_system(cmda78_session_t *session, cmdMsg_t *cmdMsg
     default:
         break;
     }
+    cmda78_release_cmdMsg(cmdMsg);
     return 0;
 }
 
@@ -181,6 +182,7 @@ static int32_t          vcodec_run_cmdbuf(cmda78_session_t *session, cmdMsg_t *c
 
     cnode = cmdsession_search_cmdnode(session, cmdBody->ackNum);
     if (cnode == NULL) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_ACKNUM;
     }
 
@@ -198,6 +200,7 @@ static int32_t          vcodec_ctrl_cmdbuf(cmda78_session_t *session, cmdMsg_t *
 
     cnode = cmdsession_search_cmdnode(session, cmdBody->ackNum);
     if (cnode == NULL) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_ACKNUM;
     }
 
@@ -215,6 +218,7 @@ static int32_t          vcodec_drop_owner(cmda78_session_t *session, cmdMsg_t *c
 
     cnode = cmdsession_search_cmdnode(session, cmdBody->ackNum);
     if (cnode == NULL) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_ACKNUM;
     }
 
@@ -233,23 +237,29 @@ static int32_t          vcodec_report_cmdbuf_ready(cmda78_session_t *session, cm
     int32_t  retCode = CMD_ERR_SUCCESS;
 
     if (cmdBody->status != 0x00) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_PARAM;
     }
 
     if ((cmdBody->cmdbuf_id == ANY_CMDBUF_ID) || (cmdBody->cmdbuf_id >= SLOT_NUM_CMDBUF)) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_CMDBUFID;
     }
 
-    ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, cmdBody->cmdbuf_id);
+
     vcmd_mgr = cmda78_get_vcmd_mgr(cmdBody->vcmdmgr_id);
     obj = &vcmd_mgr->objs[cmdBody->cmdbuf_id];
     if (obj->po != session->proc) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_PROCOBJ;
     }
 
     if (cmdBody->vcmdmgr_id >= VCMD_MGR_ID_MAX) {
+        cmda78_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_VCMDMGRID;
     }
+
+    obj->cmdbuf_run_done = 1;
 
     switch(cmdBody->vcmdmgr_id) {
         case VCMD_MGR_ID_ENC:
@@ -285,14 +295,14 @@ int32_t        cmda78_session_vcodec(cmda78_session_t *session, cmdMsg_t *cmdMsg
     default:
         break;
     }
+
+    cmda78_release_cmdMsg(cmdMsg);
     return 0;
 }
 
 int32_t        cmda78_session_send(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
     cmdMsg->sessionID    = session->sessionID;
-    spin_lock(&session->spinlock);
     cmdMsg->seqNum       = session->seqSNum++;
-    spin_unlock(&session->spinlock);
     cmdMsg->timeStamp    = 0x00000000;
     return cmda78_send(cmdMsg);
 }

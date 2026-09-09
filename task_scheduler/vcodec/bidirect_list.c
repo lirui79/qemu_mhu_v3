@@ -56,35 +56,13 @@
  ********************************************************************************
  */
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
-
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 #include "bidirect_list.h"
 
 void init_bi_list(bi_list *list)
 {
 	list->head = NULL;
 	list->tail = NULL;
-}
-
-bi_list_node *bi_list_create_node(void)
-{
-	bi_list_node *node = NULL;
-
-	node = vmalloc(sizeof(bi_list_node));
-	if (!node) {
-		ts_printf("%s\n", "vmalloc for node fail!");
-		return node;
-	}
-	memset(node, 0, sizeof(bi_list_node));
-	return node;
-}
-
-void bi_list_free_node(bi_list_node *node)
-{
-	//free current node
-	vfree(node);
 }
 
 void bi_list_insert_node_tail(bi_list *list, bi_list_node *current_node)

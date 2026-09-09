@@ -46,8 +46,6 @@ int32_t         cmdr52_mgr_init(cmdr52_mgr_t *mgr, uint32_t r52coreID) {
         cmgr->vtb_size  = CMD_SESSION_MAX; // r52 core number
         sessionID = ((cmgr->r52coreID << 16) & 0xFFFF0000);
         spin_lock_init(&cmgr->spinlock);
-        atomic_set(&cmgr->refcount, 0);
-        init_waitqueue_head(&cmgr->workwaitqueue);
         for (i = 0; i < cmgr->vtb_size; ++i) {
             cmdr52_session_init(&cmgr->vtb[i], sessionID + i);
         }
@@ -63,20 +61,15 @@ int32_t         cmdr52_mgr_init(cmdr52_mgr_t *mgr, uint32_t r52coreID) {
     return 0;
 }
 
-int32_t          cmdr52_start_mgr(void) {
-    return cmdr52_thread_create(cmdr52_mgr_get());
-}
-
-int32_t          cmdr52_exit_mgr(void){
+int32_t          cmdr52_mgr_exit(void){
     cmdr52_mgr_t* mgr = cmdr52_mgr_get();
-    cmdr52_thread_stop(mgr);
     if (mgr->cmd_queue) {
         BQueueDelete(mgr->cmd_queue);
     }
 
     return 0;
-
 }
+
 cmdr52_mgr_t *cmdr52_mgr_get(void) {
     return &g_cmdr52_mgr;
 }
@@ -208,7 +201,6 @@ RETURN_ERROR:
     return retCode;
 }
 
-
 int32_t cmdr52_mgr_proc_cmdMsg(cmdMsg_t *cmdMsg) {
     cmdr52_session_t *session = NULL;
 
@@ -220,7 +212,7 @@ int32_t cmdr52_mgr_proc_cmdMsg(cmdMsg_t *cmdMsg) {
         return CMD_ERR_INVALID_SEQUENCEID;
     }
 
-    if (cmdMsg->cmdType <= CMD_SYSTEM_MAX) {
+    if ((cmdMsg->cmdType >= CMD_SYSTEM_MIN ) && (cmdMsg->cmdType <= CMD_SYSTEM_MAX)) {
         return cmdr52_session_system(session, cmdMsg);
     }
 

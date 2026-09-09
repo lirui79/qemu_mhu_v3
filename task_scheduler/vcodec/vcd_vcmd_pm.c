@@ -30,14 +30,14 @@ int vcmd_vcd_pm_suspend(void *handler)
 	struct hantrovcmd_dev *dev;
 	u32 aborted_id;
 	int i;
-	unsigned long flags;
+	uint32_t   flags;
 	bi_list_node *node;
 	struct cmdbuf_obj *obj;
 
 	for (i = 0; i < vcmd_mgr->subsys_num; i++) {
 		dev = &vcmd_mgr->dev_ctx[i];
 
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		if (dev->state == VCMD_STATE_WORKING) {
 			vcmd_get_executing_cmdbuf(vcmd_mgr, dev, &node);
 			obj = (struct cmdbuf_obj *)node->data;
@@ -46,7 +46,7 @@ int vcmd_vcd_pm_suspend(void *handler)
 			vcmd_abort_mode_set(vcmd_mgr, dev, obj);
 			vcmd_abort(vcmd_mgr, dev, &aborted_id);
 
-			spin_lock_irqsave(dev->spinlock, flags);
+			flags = spin_lock_irqsave(dev->spinlock);
 			if (dev->abort_mode == 1)
 				dev->abort_mode = 0;
 			if (dev->state != VCMD_STATE_IDLE) {
@@ -71,7 +71,7 @@ int vcmd_vcd_pm_resume(void *handler)
 	vcmd_mgr_t *vcmd_mgr = (vcmd_mgr_t *)handler;
 	struct hantrovcmd_dev *dev;
 	int i;
-	unsigned long flags;
+	uint32_t   flags;
 	struct cmdbuf_obj *obj;
 
 #ifdef SUPPORT_MMU
@@ -93,7 +93,7 @@ int vcmd_vcd_pm_resume(void *handler)
 
 	for (i = 0; i < vcmd_mgr->subsys_num; i++) {
 		dev = &vcmd_mgr->dev_ctx[i];
-		spin_lock_irqsave(dev->spinlock, flags);
+		flags = spin_lock_irqsave(dev->spinlock);
 		obj = &vcmd_mgr->objs[dev->aborted_cmdbuf_id];
 		if (dev->state == VCMD_STATE_POWER_OFF &&
 				obj->executing_status != CMDBUF_EXE_STATUS_SLICE_DECODING_SUSPEND) {

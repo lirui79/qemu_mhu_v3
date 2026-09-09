@@ -124,12 +124,12 @@ void process_vce_abn_irq(vcmd_mgr_t *vcmd_mgr, struct hantrovcmd_dev *dev,
 	struct vcmd_subsys_info *subsys = dev->subsys_info;
 
 	volatile void *hwregs;
-	unsigned long flags;
+	uint32_t   flags;
 	u32 irq;
 
 	hwregs = subsys->hwregs[SUB_MOD_MAIN];
 
-	spin_lock_irqsave(&dev->abn_irq_lock, flags);
+	flags = spin_lock_irqsave(&dev->abn_irq_lock);
 	// read VCE int_status
 	irq = (u32)ioread32((void __iomem *)(hwregs + 0x04));
 	if (irq & ASIC_STATUS_SLICE_READY) {
@@ -141,6 +141,5 @@ void process_vce_abn_irq(vcmd_mgr_t *vcmd_mgr, struct hantrovcmd_dev *dev,
 		process_vce_line_buffer_irq(vcmd_mgr, hwregs, obj, irq);
 	}
 	spin_unlock_irqrestore(&dev->abn_irq_lock, flags);
-
 }
 

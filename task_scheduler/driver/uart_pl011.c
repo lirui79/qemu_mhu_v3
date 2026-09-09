@@ -3,19 +3,19 @@
 
 static const uint32_t refclock = 50000000u; /* 50 MHz */
 
-int uart_configure(uint32_t uart_base, uart_config* config)
+int uart_configure(uint32_t uart_base, uart_config_t* config)
 {
-    uart_registers* uart = (uart_registers*)uart_base;
+    uart_registers_t* uart = (uart_registers_t*)uart_base;
 
     /* Validate config */
     if (config->data_bits < 5u || config->data_bits > 8u) {
-        return -1;
+        return TS_ERR_INVALID_ARG;
     }
     if (config->stop_bits == 0u || config->stop_bits > 2u) {
-        return -2;
+        return TS_ERR_INVALID_ARG;
     }
     if (config->baudrate < 110u || config->baudrate > 460800u) {
-        return -3;
+        return TS_ERR_INVALID_ARG;
     }
 
     /* Disable the UART */
@@ -74,12 +74,12 @@ int uart_configure(uint32_t uart_base, uart_config* config)
     /* Enable the UART */
     uart->CR |= CR_UARTEN;
 
-    return 0;
+    return TS_OK;
 }
 
 void uart_putchar(uint32_t uart_base, char c)
 {
-    uart_registers* uart = (uart_registers*)uart_base;
+    uart_registers_t* uart = (uart_registers_t*)uart_base;
     while (uart->FR & FR_TXFF);
     uart->DR = c;
 }
@@ -93,16 +93,16 @@ void uart_write(uint32_t uart_base, const char* data)
 
 int uart_getchar(uint32_t uart_base, char* c)
 {
-    uart_registers* uart = (uart_registers*)uart_base;
+    uart_registers_t* uart = (uart_registers_t*)uart_base;
     if (uart->FR & FR_RXFE) {
-        return -1;
+        return TS_ERR_EMPTY;
     }
 
     *c = uart->DR & DR_DATA_MASK;
     if (uart->RSRECR & RSRECR_ERR_MASK) {
         /* The character had an error */
         uart->RSRECR &= RSRECR_ERR_MASK;
-        return -2;
+        return TS_ERR_IO;
     }
-    return 0;
+    return TS_OK;
 }

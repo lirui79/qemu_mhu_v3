@@ -37,6 +37,12 @@
 			no-map;
 		};
 
+		r52_memalloc: r52-pool@8F000000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x8F000000 0x0 0x01000000>;
+			no-map;
+		};
+
 		vpu_memalloc: vpu-pool@90100000 {
 			compatible = "shared-dma-pool";
 			reg = <0x0 0x90100000 0x0 0x08000000>;

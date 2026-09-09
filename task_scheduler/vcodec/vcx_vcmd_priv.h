@@ -59,12 +59,9 @@
 #ifndef _VCX_VCMD_PRIV_H_
 #define _VCX_VCMD_PRIV_H_
 
-#ifdef __FREERTOS__
-#include "osal_freertos.h" /* needed for the _IOW etc stuff used later */
-#endif
+#include "osal.h" /* needed for the _IOW etc stuff used later */
 
 #include "vcodec.h"
-#include "wait_queue.h"
 #include "cmdr52_session.h"
 #include "vcx_vcmd_defs.h"
 #include "bidirect_list.h"
@@ -298,9 +295,9 @@ struct hantrovcmd_dev {
 	volatile u8 *hwregs; /* registers IO mem base */
 	u32 reg_mirror[ASIC_VCMD_SWREG_AMOUNT];
 
-	spinlock_t owner_lock_vcmd;
-	spinlock_t *spinlock;			//point to owner_lock_vcmd
-	bi_list work_list;
+	spinlock   owner_lock_vcmd;
+	spinlock  *spinlock;			//point to owner_lock_vcmd
+	bi_list    work_list;
 
 	u32 sw_cmdbuf_rdy_num;
 
@@ -317,9 +314,9 @@ struct hantrovcmd_dev {
 
 	//translation offset from bus addr (ba) to physical addr (pa).
 	ptr_t pa_trans_offset;
-	wait_queue_head_t abort_queue_vcmd;
+//	wait_queue_head_t abort_queue_vcmd;
 
-	wait_queue_head_t *abort_waitq;	//point to abort_queue_vcmd
+//	wait_queue_head_t *abort_waitq;	//point to abort_queue_vcmd
 
 	u32 abort_mode;		//0: stop when JMP/END; 1: stop curr-cmd (imediately);
 	enum vcmd_sw_init_mode init_mode;
@@ -332,17 +329,17 @@ struct hantrovcmd_dev {
 
 	void *handler;		// point to vcmd_mgr
 	u32 abn_irq_mask; // abnormal irq mask
-        u32 vcd_abn_irq_mask;
+    u32 vcd_abn_irq_mask;
 	u32 intr_gate_mask;
-	spinlock_t abn_irq_lock;
+	spinlock  abn_irq_lock;
 
 	// timeout interrupt post process related
-	TimerHandle_t timeout_timer;
-	u8 timeout_timer_active;
+//	TimerHandle_t timeout_timer;
+//	u8 timeout_timer_active;
 
 	//watchdog for monitor exceptions
-	TimerHandle_t watchdog_timer;
-	u8 watchdog_active;
+//	TimerHandle_t watchdog_timer;
+//	u8 watchdog_active;
 
 	/* device actions for wake up vcmd driver kthread
 	 * refer to KT_ACT_xxx
@@ -357,7 +354,7 @@ struct hantrovcmd_dev {
 	/* for slice decoding, the wait queue is used to wait buffer empty
 	 * interrupt in pm suspend process.
 	 */
-	wait_queue_head_t buff_empty_waitq; // buffer empty wait queue
+    volatile uint32_t  buff_empty_waitq;
 
 #ifdef SUPPORT_DBGFS
 	void *dbgfs_info;
@@ -403,20 +400,17 @@ typedef struct {
 	//PCIE_EN defined
 	struct noncache_mem pcie_pool;	//pool for mem_vcmd, mem_status and mem_regs
 
-//	SemaphoreHandle_t isr_polling_sema;
-//	struct semaphore isr_polling_sema; //for reserve cmdbuf
-
 	volatile u8 *mmu_hwregs[MAX_VCMD_NUM][2];
 
 //	struct task_struct *kthread;//	u8 stop_kthread;	wait_queue_head_t   kthread_waitq;
-    TaskHandle_t         kthread;
+//  TaskHandle_t         kthread;
 
 #ifdef SUPPORT_DBGFS
 	void *dbgfs_ctx;
 #endif
 
-	wait_queue_head_t    job_waitq;
-	spinlock_t           job_lock;
+//	wait_queue_head_t    job_waitq;
+	spinlock             job_lock;
 	struct bi_list       job_done_list;
 	u32                  in_wait;		/* user is waiting for a specified cmdbuf run done */
 	u32                  vcmd_mgr_id;
