@@ -46,6 +46,7 @@ int32_t        cmdr52_session_check(cmdr52_session_t *session, cmdMsg_t *cmdMsg)
         cmdSBody->procObj   = session->procObj;
         cmdSBody->timeStamp = cmdMsg->timeStamp;
         cmdr52_session_send(session, cmdSMsg);
+        cmdr52_mgr_release_cmdMsg(cmdSMsg);
         return CMD_ERR_INVALID_SEQUENCEID;
     }
     session->seqRNum++;
@@ -88,7 +89,9 @@ static int32_t cmd_system_open_session(cmdr52_session_t *session, cmdMsg_t *cmdM
     cmdSBody->code       = retCode;
 
     ts_printf("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, r52CoreID, cmdr52_session->sessionID);
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 static int32_t cmd_system_close_session(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
@@ -123,24 +126,28 @@ static int32_t cmd_system_close_session(cmdr52_session_t *session, cmdMsg_t *cmd
     cmdSBody->procObj    = cmdBody->procObj;
 
     ts_printf("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, ((session->sessionID & 0xFFFF0000) >> 16), cmdr52_session->sessionID);
-    return cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 int32_t        cmdr52_session_system(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
+    int32_t retCode = CMD_ERR_SUCCESS;
     switch (cmdMsg->cmdType) {
     case CMD_REQ_EXE_SYSCTL:
         //return cmd_system_echo(cmdMsg);
         break;
     case CMD_REQ_OPEN_SESSION:
-        return cmd_system_open_session(session, cmdMsg);
+        retCode = cmd_system_open_session(session, cmdMsg);
         break;
     case CMD_REQ_CLOSE_SESSION:
-        return cmd_system_close_session(session, cmdMsg);
+        retCode = cmd_system_close_session(session, cmdMsg);
         break;
     default:
         break;
     }
-    return 0;
+    cmdr52_mgr_release_cmdMsg(cmdMsg);
+    return retCode;
 }
 
 static int32_t          vcodec_run_cmdbuf(cmdr52_session_t *session, cmdMsg_t *cmdMsg){
@@ -174,7 +181,9 @@ static int32_t          vcodec_run_cmdbuf(cmdr52_session_t *session, cmdMsg_t *c
     cmdSBody->vcmdmgr_id = cmdBody->vcmdmgr_id;
     cmdSBody->cmdbuf_id  = cmdBody->cmdbuf_id;
     cmdSBody->core_id    = cmdBody->core_id;
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 static int32_t          vcodec_ctrl_cmdbuf(cmdr52_session_t *session, cmdMsg_t *cmdMsg){
@@ -219,7 +228,9 @@ static int32_t          vcodec_ctrl_cmdbuf(cmdr52_session_t *session, cmdMsg_t *
     }
 
     cmdSBody->code       = retCode;
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 static int32_t          vcodec_drop_owner(cmdr52_session_t *session, cmdMsg_t *cmdMsg){
@@ -250,26 +261,30 @@ static int32_t          vcodec_drop_owner(cmdr52_session_t *session, cmdMsg_t *c
     }
 
     cmdSBody->code       = retCode;
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 int32_t        cmdr52_session_vcodec(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
+    int32_t retCode = CMD_ERR_SUCCESS;
     switch (cmdMsg->cmdType) {
     case CMD_REQ_RUN_CMDBUF:
-        return vcodec_run_cmdbuf(session, cmdMsg);
+        retCode = vcodec_run_cmdbuf(session, cmdMsg);
         break;
     case CMD_REQ_PUSH_SLICE_REG:
     case CMD_REQ_POLLING_CMDBUF:
     case CMD_REQ_ABORT_CMDBUF:
-        return vcodec_ctrl_cmdbuf(session, cmdMsg);
+        retCode = vcodec_ctrl_cmdbuf(session, cmdMsg);
         break;
     case CMD_REQ_DROP_OWNER:
-        return vcodec_drop_owner(session, cmdMsg);
+        retCode = vcodec_drop_owner(session, cmdMsg);
         break;
     default:
         break;
     }
-    return 0;
+    cmdr52_mgr_release_cmdMsg(cmdMsg);
+    return retCode;
 }
 
 int32_t        cmdr52_session_send(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
@@ -279,9 +294,8 @@ int32_t        cmdr52_session_send(cmdr52_session_t *session, cmdMsg_t *cmdMsg) 
     cmdMsg->seqNum       = session->seqSNum++;
     cmdMsg->crc32        = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
     snsz                 = mhu_send_data(ch, (void*)cmdMsg, cmdMsg->cmdSize);
-    cmdr52_mgr_release_cmdMsg(cmdMsg);
     if (snsz != cmdMsg->cmdSize) {
-        ts_printf("Failed to send create process cmd, ret %u\n", snsz);
+        ts_printf("Failed to send cmd, ret %u\n", snsz);
         return -1;
     }
     return 0;

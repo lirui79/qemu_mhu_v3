@@ -53,7 +53,8 @@ int32_t        cmda78_session_system(cmda78_session_t *session, cmdMsg_t *cmdMsg
 
 int32_t        cmda78_session_vcodec(cmda78_session_t *session, cmdMsg_t *cmdMsg);
 
-int32_t        cmda78_session_send(cmda78_session_t *session, cmdMsg_t *cmdMsg);
+int32_t        cmda78_session_send(cmdMsg_t *cmdMsg);
+
 
 
 #ifdef __cplusplus

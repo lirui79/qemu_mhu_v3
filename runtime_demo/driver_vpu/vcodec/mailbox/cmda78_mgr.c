@@ -30,6 +30,8 @@ static int               _cmda78_init_mgr(cmda78_mgr_t *mgr) {
     mgr->rtb_size  = CMD_R52_MGR_MAX; // r52 core number
     for (i = 0; i < CMD_R52_MGR_MAX; ++i) {
         rmgr = &mgr->rtb[i];
+        atomic_set(&rmgr->refcount, 0);
+        init_waitqueue_head(&rmgr->workwaitqueue);
         rmgr->coremask  = coremask[i];
         rmgr->workload  = 0;
         rmgr->status    = CMD_R52MGR_STATUS_INIT;
@@ -37,6 +39,7 @@ static int               _cmda78_init_mgr(cmda78_mgr_t *mgr) {
         rmgr->vtb_size  = CMDA78_SESSION_MAX; // session number per r52 core
         rmgr->usedsize  = 0; // current used session number
         spin_lock_init(&rmgr->spinlock);
+        clist_init(&rmgr->cmd_queue);
     // 创建并启动内核线程，将 dev 作为参数传入
         for (j = 0 ; j < CMDA78_SESSION_MAX; ++j) {
             uint32_t sessionID = ((rmgr->r52coreid << 16) & 0xFFFF0000) | j;
@@ -44,13 +47,19 @@ static int               _cmda78_init_mgr(cmda78_mgr_t *mgr) {
         }
     }
 
-    atomic_set(&mgr->refcount, 0);
-    init_waitqueue_head(&mgr->workwaitqueue);
-
     for (i = 0; i < VCMD_MGR_ID_MAX; ++i) {
         mgr->mtb[i] = NULL;
     }
-    mgr->cmd_queue = BQueueCreate(1024, CMD_MSG_MAX_SIZE);
+
+    mgr->cmd_size = 1024;
+    mgr->cmd_data = (uint8_t*)vmalloc(mgr->cmd_size * (32 + CMD_MSG_MAX_SIZE));
+    clist_init(&mgr->cmd_free);
+    spin_lock_init(&mgr->spinlock);
+    for (i = 0; i < mgr->cmd_size; ++i) {
+        cnode_t *node = (cnode_t *)(mgr->cmd_data + i * (32 + CMD_MSG_MAX_SIZE));
+        cnode_init(node);
+        clist_push_back(&mgr->cmd_free, node);
+    }
 
     return  0;
 }
@@ -66,8 +75,9 @@ int32_t               cmda78_start_mgr(void) {
 int32_t               cmda78_exit_mgr(void) {
     cmda78_mgr_t* mgr = cmda78_get_mgr();
     cmda78_thread_stop(mgr);
-    if (mgr->cmd_queue) {
-        BQueueDelete(mgr->cmd_queue);
+    if (mgr->cmd_data) {
+        vfree(mgr->cmd_data);
+        mgr->cmd_data = NULL;
     }
 
     return 0;
@@ -175,23 +185,59 @@ cmda78_session_t*    cmda78_get_idle_session(void) {
 }
 
 cmdMsg_t*         cmda78_dequeue_cmdMsg(void) {
-    return (cmdMsg_t *)BQueueDequeue(cmda78_get_mgr()->cmd_queue);
+    cnode_t *cmd_node = NULL;
+    cmdMsg_Data_t* cmdMsg_data = NULL;
+    cmda78_mgr_t* mgr = cmda78_get_mgr();
+    spin_lock(&mgr->spinlock);
+    cmd_node = clist_pop_back(&(mgr->cmd_free));
+    spin_unlock(&mgr->spinlock);
+    if (cmd_node == NULL) {
+        return NULL;
+    }
+    cmdMsg_data = (cmdMsg_Data_t*) container_of(cmd_node, cmdMsg_Data_t, node);
+    return (cmdMsg_t *)&(cmdMsg_data->cMsg);
 }
 
-cmdMsg_t*         cmda78_acquire_cmdMsg(void) {
-    return (cmdMsg_t *)BQueueAcquire(cmda78_get_mgr()->cmd_queue);
+cmdMsg_t*         cmda78_acquire_cmdMsg(cmd_r52mgr_t *rmgr) {
+    cnode_t *cmd_node = NULL;
+    cmdMsg_Data_t* cmdMsg_data = NULL;
+    spin_lock(&rmgr->spinlock);
+    cmd_node = clist_pop_back(&(rmgr->cmd_queue));
+    spin_unlock(&rmgr->spinlock);
+    if (cmd_node == NULL) {
+        return NULL;
+    }
+    cmdMsg_data = (cmdMsg_Data_t*) container_of(cmd_node, cmdMsg_Data_t, node);
+    return (cmdMsg_t *)&(cmdMsg_data->cMsg);
 }
 
 int32_t           cmda78_release_cmdMsg(cmdMsg_t* cmdMsg) {
-    return   BQueueRelease(cmda78_get_mgr()->cmd_queue, cmdMsg);
+    cmdMsg_Data_t* cmdMsg_data = (cmdMsg_Data_t*) container_of(cmdMsg, cmdMsg_Data_t, cMsg);
+    cmda78_mgr_t* mgr = cmda78_get_mgr();
+    int32_t  code = 0;
+    spin_lock(&mgr->spinlock);
+    code = clist_push_back(&(mgr->cmd_free), &(cmdMsg_data->node));
+    spin_unlock(&mgr->spinlock);
+    return code;
 }
 
-int32_t           cmda78_queue_cmdMsg(cmdMsg_t* cmdMsg) {
-    return   BQueueQueue(cmda78_get_mgr()->cmd_queue, cmdMsg);
+int32_t           cmda78_queue_cmdMsg(cmd_r52mgr_t *rmgr, cmdMsg_t* cmdMsg) {
+    cmdMsg_Data_t* cmdMsg_data = (cmdMsg_Data_t*) container_of(cmdMsg, cmdMsg_Data_t, cMsg);
+    int32_t  code = 0;
+    spin_lock(&rmgr->spinlock);
+    code = clist_push_back(&(rmgr->cmd_queue), &(cmdMsg_data->node));
+    spin_unlock(&rmgr->spinlock);
+    return code;
 }
 
 int32_t           cmda78_cancel_cmdMsg(cmdMsg_t* cmdMsg) {
-    return   BQueueCancel(cmda78_get_mgr()->cmd_queue, cmdMsg);
+    cmdMsg_Data_t* cmdMsg_data = (cmdMsg_Data_t*) container_of(cmdMsg, cmdMsg_Data_t, cMsg);
+    cmda78_mgr_t* mgr = cmda78_get_mgr();
+    int32_t  code = 0;
+    spin_lock(&mgr->spinlock);
+    code = clist_push_back(&(mgr->cmd_free), &(cmdMsg_data->node));
+    spin_unlock(&mgr->spinlock);
+    return code;
 }
 
 void print_byte_array(const char *label, const uint8_t *arr, size_t len) {
@@ -274,4 +320,18 @@ int32_t cmda78_proc_cmdMsg(cmdMsg_t *cmdMsg) {
     }
 
     return cmda78_session_vcodec(session, cmdMsg);
+}
+
+int32_t              cmda78_add_cmdMsg(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
+    cmda78_mgr_t* mgr = cmda78_get_mgr();
+    uint32_t r52ID = ((session->sessionID & 0xFFFF0000) >> 16);
+    cmd_r52mgr_t *rmgr = &mgr->rtb[r52ID];
+    int32_t code = 0;
+    spin_lock(&session->spinlock);
+    cmdMsg->seqNum       = session->seqSNum++;
+    code = cmda78_queue_cmdMsg(rmgr, cmdMsg);
+    spin_unlock(&session->spinlock);
+    atomic_inc(&rmgr->refcount);
+    wake_up_interruptible(&rmgr->workwaitqueue);
+    return code;
 }

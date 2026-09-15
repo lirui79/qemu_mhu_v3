@@ -16,8 +16,9 @@ LINKER_FILE  := $(PROJ_ROOT)/link.ld
 # ==============================================================================
 # Toolchain Setup (修复命名歧义：仅路径+通用前缀，不带工具后缀)
 # ==============================================================================
-TOOLCHAIN_PATH := /home/stone/tools/arm-gnu-toolchain-15.2.rel1-x86_64-aarch64-none-elf/bin
-CROSS_PREFIX   := $(TOOLCHAIN_PATH)/aarch64-none-elf
+#TOOLCHAIN_PATH := /home/stone/tools/arm-gnu-toolchain-15.2.rel1-x86_64-aarch64-none-elf/bin
+#CROSS_PREFIX   := $(TOOLCHAIN_PATH)/aarch64-none-elf
+CROSS_PREFIX   := aarch64-none-elf
 
 AS             := $(CROSS_PREFIX)-as
 CC             := $(CROSS_PREFIX)-gcc
@@ -95,7 +96,6 @@ VCODEC_SRCS    := \
     $(PROJ_ROOT)/mailbox/cmda78_mgr.c \
     $(PROJ_ROOT)/mailbox/cmda78_msg.c \
     $(PROJ_ROOT)/mailbox/cmda78_proc.c \
-    $(PROJ_ROOT)/mailbox/mhu_v3_client.c \
     $(PROJ_ROOT)/mailbox/cmda78_session.c \
     $(PROJ_ROOT)/task/vcodec.c \
     $(PROJ_ROOT)/utils/kref.c \

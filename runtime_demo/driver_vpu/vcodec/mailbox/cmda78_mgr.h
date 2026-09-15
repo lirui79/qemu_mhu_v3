@@ -19,7 +19,7 @@
 
 
 #include "cmdef.h"
-#include "bqueue.h"
+#include "clist.h"
 #include "cmda78_session.h"
 #include "vcx_vcmd_priv.h"
 
@@ -41,6 +41,11 @@ typedef enum {
     CMD_R52MGR_STATUS_EXIT,
 } cmd_r52mgr_status;
 
+typedef struct cmdMsg_Data_t {
+    cnode_t         node;
+    cmdMsg_t        cMsg;
+} cmdMsg_Data_t;
+
 typedef struct {
     uint64_t           workload;
     uint32_t           coremask;
@@ -49,6 +54,10 @@ typedef struct {
     uint32_t           vtb_size; //
     uint32_t           usedsize; //
     cmda78_session_t   vtb[CMDA78_SESSION_MAX];// vcodec session table
+
+    clist_t            cmd_queue;
+    wait_queue_head_t  workwaitqueue;
+    atomic_t           refcount;
 	spinlock_t         spinlock;
 } cmd_r52mgr_t;
 
@@ -57,11 +66,14 @@ typedef struct {
     uint32_t              rtb_size; //
     cmd_r52mgr_t          rtb[CMD_R52_MGR_MAX];// r52 cmd mgr table
     vcmd_mgr_t*           mtb[VCMD_MGR_ID_MAX];	// vcmd manager  0-vcmd mgr enc, 1- vcmd mgr dec
-    BQueueHandle_t        cmd_queue; // command queue
+
+    uint8_t              *cmd_data;
+    uint32_t              cmd_size;
+	spinlock_t            spinlock;
+    clist_t               cmd_free;
+
     struct task_struct   *recv_thread[CMD_R52_MGR_MAX];
-    struct task_struct   *work_thread;
-    wait_queue_head_t     workwaitqueue;
-    atomic_t              refcount;
+    struct task_struct   *work_thread[CMD_R52_MGR_MAX];
 } cmda78_mgr_t;
 
 
@@ -87,15 +99,17 @@ cmda78_session_t*    cmda78_get_idle_session(void);
 
 cmdMsg_t*            cmda78_dequeue_cmdMsg(void);
 
-cmdMsg_t*            cmda78_acquire_cmdMsg(void);
+cmdMsg_t*            cmda78_acquire_cmdMsg(cmd_r52mgr_t *rmgr);
 
 int32_t              cmda78_release_cmdMsg(cmdMsg_t* cmdMsg);
 
-int32_t              cmda78_queue_cmdMsg(cmdMsg_t* cmdMsg);
+int32_t              cmda78_queue_cmdMsg(cmd_r52mgr_t *rmgr, cmdMsg_t* cmdMsg);
 
 int32_t              cmda78_cancel_cmdMsg(cmdMsg_t* cmdMsg);
 
 int32_t              cmda78_proc_cmdMsg(cmdMsg_t *cmdMsg);
+
+int32_t              cmda78_add_cmdMsg(cmda78_session_t *session, cmdMsg_t *cmdMsg);
 
 
 

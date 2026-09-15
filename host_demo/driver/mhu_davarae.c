@@ -486,15 +486,20 @@ uint32_t mhu_recv_data(uint32_t ch, void *buf_ptr, uint32_t buf_len)
     }
 
     flg_val = arch_local_irq_save();
-    fill = mhu_fifo_rx_fill(MHU_MBX_BASE, ch);
-    if(fill == 0U) {
-        /* fifo empty, restore interrupt enable */
-        val = mhu_read32(MHU_MBX_BASE + MHU_MBX_FFCW_INT_ST(ch));
-        if (val)
-            mhu_fifo_clear_rx_irq(MHU_MBX_BASE, ch, val);
-        mhu_write32(MHU_MBX_BASE + MHU_MBX_FFCW_INT_EN(ch), 0xFFFFFFFFU);
-        g_mbx_ff_stat_0 &= ~(1U << ch);
-    }
+    /* 收完一包后必须无条件清中断状态并使能本通道中断。
+     * IRQ handler 进入时会关闭该通道 INT_EN(电平触发, 防中断风暴), 而接收线程
+     * mhu_v3_wait_event_interruptible 没有超时, 只能靠中断唤醒。若此处因为 FIFO
+     * 里残留了下一个包的前半部分(0 < fill < CMD_MSG_MIN_SIZE)而不使能中断, 对端
+     * 把剩余 word push 进来时就不会再产生中断, 接收线程将永久睡眠, 该包(应答)
+     * 永远不会被取出 -> 上层表现为请求 "timeout!"。
+     * 残留数据 >= CMD_MSG_MIN_SIZE 时, 等待条件本身就会立即返回并收取, 因此
+     * 无条件使能不会重复处理已经收到的数据。 */
+    /* fifo empty, restore interrupt enable */
+    val = mhu_read32(MHU_MBX_BASE + MHU_MBX_FFCW_INT_ST(ch));
+    if (val)
+        mhu_fifo_clear_rx_irq(MHU_MBX_BASE, ch, val);
+    mhu_write32(MHU_MBX_BASE + MHU_MBX_FFCW_INT_EN(ch), 0xFFFFFFFFU);
+    g_mbx_ff_stat_0 &= ~(1U << ch);
     arch_local_irq_restore(flg_val);
     return (len * 4U);
 }

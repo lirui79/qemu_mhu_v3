@@ -18,33 +18,57 @@
 #include "cmda78_proc.h"
 #include "mhu_v3_client.h"
 
-int32_t cmda78_send(cmdMsg_t *cmdMsg) {
-    int32_t retCode = 0;
-    uint32_t r52ID = ((cmdMsg->sessionID & 0xFFFF0000) >> 16);
-    cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-// mailbox_send(cmdMsg);//    retCode = mhu_send_data((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-    retCode = mhu_v3_send_data(r52ID, (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-    return retCode;
+static int32_t cmda78_cmdMsg_req(cmdMsg_t *cmdMsg) {
+    switch(cmdMsg->cmdType) {
+        case    CMD_REQ_EXE_SYSCTL:
+        case    CMD_REQ_SET_SYSCFG:
+        case    CMD_REQ_GET_SYSCFG:
+        case    CMD_REQ_SET_LOGCFG:
+        case    CMD_REQ_GET_LOGCFG:
+        case    CMD_REQ_GET_SYSTATE:
+        case    CMD_REQ_OPEN_SESSION:
+        case    CMD_REQ_CLOSE_SESSION:
+        case    CMD_REQ_RUN_CMDBUF:
+        case    CMD_REQ_PUSH_SLICE_REG:
+        case    CMD_REQ_POLLING_CMDBUF:
+        case    CMD_REQ_ABORT_CMDBUF:
+        case    CMD_REQ_DROP_OWNER:
+                return 1;
+                break;
+        default:
+                break;
+    }
+    return 0;
 }
 
 static int32_t cmda78_work_thread_proc(void *arg) {
-    cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
+    cmd_r52mgr_t *rmgr = (cmd_r52mgr_t *)arg;
+    cmda78_mgr_t *mgr = (cmda78_mgr_t*) cmda78_get_mgr();
     cmdMsg_t *cmdMsg = NULL;
     int32_t retCode = 0;
 
     printk("work thread started\n");
     while (!kthread_should_stop()) {
-        if (wait_event_interruptible(mgr->workwaitqueue, atomic_read(&mgr->refcount) > 0)) {
+        if (wait_event_interruptible(rmgr->workwaitqueue, atomic_read(&rmgr->refcount) > 0)) {
             printk("wait_event_interruptible: signal %s\n", __func__);
             break;
         }
 
-        cmdMsg = cmda78_acquire_cmdMsg();
+        cmdMsg = cmda78_acquire_cmdMsg(rmgr);
         if (cmdMsg == NULL) {
+            if (atomic_read(&rmgr->refcount) > 0)
+                atomic_dec(&rmgr->refcount);
             continue;
         }
-        retCode = cmda78_proc_cmdMsg(cmdMsg);
-        atomic_dec(&mgr->refcount);
+
+        if (cmda78_cmdMsg_req(cmdMsg)) {// this is req cmd send to r52
+            retCode = cmda78_session_send(cmdMsg);
+        } else {
+            retCode = cmda78_proc_cmdMsg(cmdMsg);
+        }
+
+        if (atomic_read(&rmgr->refcount) > 0)
+            atomic_dec(&rmgr->refcount);
         if (retCode != CMD_ERR_SUCCESS) {
             printk("cmda78_proc_cmdMsg:%d\n", retCode);
         }
@@ -73,18 +97,23 @@ static int cmda78_thread_func(void *arg) {
             printk("mhu_v3_wait_event_interruptible:%d\n", code);
             continue;
         }
+        if (code == 0) {
+            /* 超时且暂无完整报文: 回到循环重新判定(兜住偶发丢失的中断),
+             * 不要占用/作废解包缓冲。 */
+            continue;
+        }
 
         cmdMsg = cmda78_dequeue_cmdMsg();
 // mailbox_recv(cmdMsg);//
         code = mhu_v3_recv_data(rmgr->r52coreid, (uint8_t *)cmdMsg, CMD_MSG_MAX_SIZE);
-        if (code != 0) {
+        if (code <= 0) {
             printk("mhu_v3_recv_data:%d\n", code);
             cmda78_cancel_cmdMsg(cmdMsg);
             continue;
         }
-        cmda78_queue_cmdMsg(cmdMsg);
-        atomic_inc(&mgr->refcount);
-        wake_up_interruptible(&mgr->workwaitqueue);
+        cmda78_queue_cmdMsg(rmgr, cmdMsg);
+        atomic_inc(&rmgr->refcount);
+        wake_up_interruptible(&rmgr->workwaitqueue);
     }
 
     printk("recv thread exiting\n");
@@ -109,26 +138,43 @@ int32_t  cmda78_thread_create(void* arg) {
         return PTR_ERR(mgr->recv_thread[1]);
     }
 
-    mgr->work_thread = kthread_run(cmda78_work_thread_proc, mgr, "work_thread");
-    if (IS_ERR(mgr->work_thread)) {
+    mgr->work_thread[0] = kthread_run(cmda78_work_thread_proc, &mgr->rtb[0], "work_thread0");
+    if (IS_ERR(mgr->work_thread[0])) {
         printk("Failed to create work thread\n");
         kthread_stop(mgr->recv_thread[1]);
         mgr->recv_thread[1] = NULL;
         kthread_stop(mgr->recv_thread[0]);
         mgr->recv_thread[0] = NULL;
-        return PTR_ERR(mgr->work_thread);
+        return PTR_ERR(mgr->work_thread[0]);
     }
 
+    mgr->work_thread[1] = kthread_run(cmda78_work_thread_proc, &mgr->rtb[1], "work_thread1");
+    if (IS_ERR(mgr->work_thread[1])) {
+        printk("Failed to create work thread\n");
+        kthread_stop(mgr->recv_thread[1]);
+        mgr->recv_thread[1] = NULL;
+        kthread_stop(mgr->recv_thread[0]);
+        mgr->recv_thread[0] = NULL;
+        kthread_stop(mgr->work_thread[0]);
+        mgr->work_thread[0] = NULL;
+        return PTR_ERR(mgr->work_thread[1]);
+    }
     return 0;
 }
 
 int32_t  cmda78_thread_stop(void* arg) {
     cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
 
-    if (mgr->work_thread) {
+    if (mgr->work_thread[1]) {
         // 请求停止并等待线程退出
-        kthread_stop(mgr->work_thread);
-        mgr->work_thread = NULL;
+        kthread_stop(mgr->work_thread[1]);
+        mgr->work_thread[1] = NULL;
+    }
+
+    if (mgr->work_thread[0]) {
+        // 请求停止并等待线程退出
+        kthread_stop(mgr->work_thread[0]);
+        mgr->work_thread[0] = NULL;
     }
 
     if (mgr->recv_thread[1]) {

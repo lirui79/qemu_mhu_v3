@@ -14,6 +14,7 @@
 **                      include command a78 session source                      **
 *********************************************************************************/
 
+#include "crc32.h"
 #include "cmdnode.h"
 #include "cmda78_mgr.h"
 #include "cmda78_proc.h"
@@ -301,8 +302,16 @@ int32_t        cmda78_session_vcodec(cmda78_session_t *session, cmdMsg_t *cmdMsg
 }
 
 int32_t        cmda78_session_send(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
+    uint32_t ch = 2 * ((session->sessionID & 0xFFFF0000) >> 16), snsz = 0;// 0 r52   0- channel a78 -> r52   1- channel r52 -> a78 ; 1 r52   2- channel a78 -> r52   3- channel r52 -> a78
     cmdMsg->sessionID    = session->sessionID;
     cmdMsg->seqNum       = session->seqSNum++;
     cmdMsg->timeStamp    = 0x00000000;
-    return cmda78_send(cmdMsg);
+    cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
+// mailbox_send(cmdMsg);
+    snsz = mhu_send_data(ch, (void *)cmdMsg, cmdMsg->cmdSize);
+    if (snsz != cmdMsg->cmdSize) {
+        ts_printf("Failed to send cmd, ret %u\n", snsz);
+        return -1;
+    }
+    return 0;
 }

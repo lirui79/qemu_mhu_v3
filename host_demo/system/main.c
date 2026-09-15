@@ -99,27 +99,6 @@ static void vTask2(void *pvParameters)
     }
 }
 
-static  void irq_callback_fifo(uint32_t irq, uint32_t channel) {
-    ts_printf("[IRQ] FIFO %u\r\n", channel);
-    uint32_t r52CoreID = 0;
-    if (irq == 0) {
-        for (r52CoreID = 0; r52CoreID < 2; r52CoreID++) {
-            if (channel & (1ul << (2 * r52CoreID + 1))) {
-               cmda78_thread_wakeup(r52CoreID);
-            }
-        }
-    } else {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        for (r52CoreID = 0; r52CoreID < 2; r52CoreID++) {
-            if (channel & (1ul << (2 * r52CoreID + 1))) {
-                cmda78_thread_wakeup_from_isr(r52CoreID, &xHigherPriorityTaskWoken);
-            }
-        }
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    }
-}
-
-
 /**
  * core 0 entry
  */
@@ -138,6 +117,10 @@ void boot_main(void)
     /* system initialization */
     interrupt_init();
     peripheral_init();
+
+    vcodeca78_init();
+    cmda78_set_callback();
+
 
     ts_printf("A76 startup (CPU%u EL%d)\n", get_cpu_id(), get_current_el());
 
@@ -183,10 +166,6 @@ void boot_main(void)
         for (;;) { __asm__ volatile("wfi"); }
     }
 //*
-    mhu_set_irq_callback(2, irq_callback_fifo);
-
-    vcodeca78_init();
-
     vcodec_test_encode();
     vcodec_test_encode();
 //    vcodec_test_encode();

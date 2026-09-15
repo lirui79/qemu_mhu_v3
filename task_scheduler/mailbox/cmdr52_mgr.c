@@ -196,6 +196,7 @@ RETURN_ERROR:
         cmdSBody->procObj   = 0x0000000000000000;//cmdMsg->procObj;
         cmdSBody->timeStamp = cmdMsg->timeStamp;
         cmdr52_session_send(cmd_session, cmdSMsg);
+        cmdr52_mgr_release_cmdMsg(cmdSMsg);
     }
 
     return retCode;
@@ -205,10 +206,12 @@ int32_t cmdr52_mgr_proc_cmdMsg(cmdMsg_t *cmdMsg) {
     cmdr52_session_t *session = NULL;
 
     if (cmd_check(cmdMsg, &session) != CMD_ERR_SUCCESS) {
+        cmdr52_mgr_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_PARAM;
     }
 
     if (cmdr52_session_check(session, cmdMsg) < 0) {
+        cmdr52_mgr_release_cmdMsg(cmdMsg);
         return CMD_ERR_INVALID_SEQUENCEID;
     }
 

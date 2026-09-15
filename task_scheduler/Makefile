@@ -30,7 +30,8 @@ OPT_LEVEL ?= 1
 DEBUG_FLAGS ?= -g
 
 # Tool setup
-TOOLCHAIN        := /home/stone/tools/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi
+#TOOLCHAIN        := /home/stone/tools/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi
+TOOLCHAIN        := arm-none-eabi
 
 AS           	 := $(TOOLCHAIN)-as
 CC           	 := $(TOOLCHAIN)-gcc

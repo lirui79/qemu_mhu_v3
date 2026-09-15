@@ -147,7 +147,7 @@ static void ddr_merge_free(void) {
 }
 
 void *ddr_alloc(uint32_t size) {
-void *ptr = NULL;
+    void *ptr = NULL;
     ddr_block_t *block = NULL;
     uint32_t i = 0, j = 0, k = 0, req_sz = 0, remain = 0;
 

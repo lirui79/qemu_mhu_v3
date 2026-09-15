@@ -17,6 +17,7 @@
 #include "cmdnode.h"
 #include "cmda78_mgr.h"
 #include "cmda78_proc.h"
+#include "mhu_v3_client.h"
 #include "cmda78_session.h"
 #include "vcx_vcmd_priv.h"
 #include "vcx_vcmd.h"
@@ -37,10 +38,11 @@ int32_t cmda78_session_init(cmda78_session_t *session, struct proc_obj *proc, ui
 }
 
 int32_t        cmda78_session_check(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
+    spin_lock(&session->spinlock);
     if (session->seqRNum != cmdMsg->seqNum) {
+        spin_unlock(&session->spinlock);
         return CMD_ERR_INVALID_SEQUENCEID;
     }
-    spin_lock(&session->spinlock);
     session->seqRNum++;
     spin_unlock(&session->spinlock);
     return 0;
@@ -62,7 +64,7 @@ static int32_t cmdsession_wake_up_all(cmdnode_t *cnode, cmdMsg_t *cmdMsg) {
     //memcpy(cnode->cmdMsg, (uint8_t*) cmdMsg, cmdMsg->cmdSize);
     cnode->cmdMsg = cmdMsg;
     retCode = cnode->code;
-    wake_up_interruptible_all(&cnode->wait);
+    wake_up(&cnode->wait);
     cmdnode_free(cnode);
     return retCode;
 }
@@ -142,13 +144,10 @@ static int32_t cmd_system_close_session(cmda78_session_t *session, cmdMsg_t *cmd
 
 static int32_t cmd_system_report(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
     cmdEvtRepCmdError_Body_t *cmdBody = (cmdEvtRepCmdError_Body_t *)cmdMsg->data;
-    //printk("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
-            (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
-            cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32);
-
-    //printk("code:%x cmdType:%x seqNum:%x sessionID:%x procObj:%llx timeStamp:%llx\n", \
-            cmdBody->code, cmdBody->cmdType, cmdBody->seqNum, cmdBody->sessionID, \
-            (unsigned long long)cmdBody->procObj, (unsigned long long)cmdBody->timeStamp);
+    // R52 拒收请求时会上报 CMD_EVT_REPORT_CMDERROR。此前这里静默丢弃，导致
+    // A76 只看到等待超时(timeout!)而查不到原因，这里显式打印被拒命令的信息。
+    printk(KERN_WARNING "r52 cmd error! code=0x%x rejCmdType=0x%x rejSeqNum=%u rejSessionID=0x%x\n",
+           cmdBody->code, cmdBody->cmdType, cmdBody->seqNum, cmdBody->sessionID);
     cmda78_release_cmdMsg(cmdMsg);
     return 0;
 }
@@ -298,9 +297,14 @@ int32_t        cmda78_session_vcodec(cmda78_session_t *session, cmdMsg_t *cmdMsg
     return 0;
 }
 
-int32_t        cmda78_session_send(cmda78_session_t *session, cmdMsg_t *cmdMsg) {
-    cmdMsg->sessionID    = session->sessionID;
-    cmdMsg->seqNum       = session->seqSNum++;
-    cmdMsg->timeStamp    = 0x00000000;
-    return cmda78_send(cmdMsg);
+int32_t        cmda78_session_send(cmdMsg_t *cmdMsg) {
+    uint32_t r52ID = ((cmdMsg->sessionID & 0xFFFF0000) >> 16);
+    int32_t  snsz = 0;
+    cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
+// mailbox_send(cmdMsg);
+    snsz =  mhu_v3_send_data(r52ID, (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
+    if (snsz != cmdMsg->cmdSize) {
+        return -1;
+    }
+    return 0;
 }

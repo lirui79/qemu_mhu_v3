@@ -19,38 +19,50 @@
 #include "cmda78_mgr.h"
 #include "mhu_davarae.h"
 #include "cmda78_proc.h"
-#include "mhu_v3_client.h"
 
 
+static void doorbell_irq_callback_t(uint32_t irq, uint32_t channel) {
+    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[(channel - 1) / 2]);
 
-int32_t cmda78_send(cmdMsg_t *cmdMsg) {
-    int32_t retCode = 0;
-    uint32_t r52ID = ((cmdMsg->sessionID & 0xFFFF0000) >> 16);
+    if (irq == 0) {
 
-    ts_printf("%s:%s:%d r52ID:%d started\n", __FILE__, __func__, __LINE__, r52ID);
+    } else {
 
-    cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-// mailbox_send(cmdMsg);//    retCode = mhu_send_data((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-    retCode = mhu_v3_send_data(r52ID, (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-
-    return retCode;
+    }
+    ts_printf("doorbell_irq_callback_t\n");
 }
 
-int32_t    cmda78_thread_wakeup(uint32_t r52CoreID) {
-    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[r52CoreID]);
-    atomic_inc(&rmgr->refcount);
-    wake_up_interruptible(&rmgr->workwaitqueue);
-    return 0;
+static void fastchan_irq_callback_t(uint32_t irq, uint32_t channel) {
+    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[(channel - 1) / 2]);
+
+    if (irq == 0) {
+
+    } else {
+
+    }
+    ts_printf("fastchan_irq_callback_t\n");
 }
 
-/* ISR 安全版本:mhu_mbx_isr 的 FF 分支在中断上下文调用 irq_callback_fifo,
- * 非 FromISR 版本里 xSemaphoreTake(portMAX_DELAY) 会触发
- * portASSERT_IF_IN_ISR(port.c:176 assert)。 */
-int32_t    cmda78_thread_wakeup_from_isr(uint32_t r52CoreID, BaseType_t *pxHigherPriorityTaskWoken) {
-    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[r52CoreID]);
-    atomic_inc_from_isr(&rmgr->refcount);
-    wake_up_interruptible_from_isr(&rmgr->workwaitqueue, pxHigherPriorityTaskWoken);
-    return 0;
+static void fifochan_irq_callback_t(uint32_t irq, uint32_t channel) {
+    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[(channel - 1) / 2]);
+
+    if (irq == 0) {
+        atomic_inc(&rmgr->refcount);
+        wake_up_interruptible(&rmgr->workwaitqueue);
+    } else {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        atomic_inc_from_isr(&rmgr->refcount);
+        wake_up_interruptible_from_isr(&rmgr->workwaitqueue, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+
+    ts_printf("fifochan_irq_callback_t %u %u\n", irq, channel);
+}
+
+void        cmda78_set_callback(void) {
+    mhu_set_irq_callback(0, doorbell_irq_callback_t);
+    mhu_set_irq_callback(1, fastchan_irq_callback_t);
+    mhu_set_irq_callback(2, fifochan_irq_callback_t);
 }
 
 static void cmda78_work_thread_proc(void *arg) {
@@ -117,9 +129,8 @@ static void cmda78_recv_thread_func(void *arg) {
 
         cmdMsg = cmda78_dequeue_cmdMsg();
 // mailbox_recv(cmdMsg);//
-        code = mhu_v3_recv_data(rmgr->r52coreid, (uint8_t *)cmdMsg, CMD_MSG_MAX_SIZE);
-        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
-        if (code != 0) {
+        code = mhu_recv_data(ch, (void *)cmdMsg, CMD_MSG_MAX_SIZE);//        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
+        if (code <= 0) {
             cmda78_cancel_cmdMsg(cmdMsg);
             continue;
         }

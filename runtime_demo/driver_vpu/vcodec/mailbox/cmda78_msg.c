@@ -34,31 +34,34 @@ static int32_t cmda78_send_wait_event(cmda78_session_t* session, struct proc_obj
     int32_t errCode = CMD_ERR_SUCCESS;
     long retCode = 0;
 
-    spin_lock(&session->spinlock);
-    retCode = cmda78_session_send(session, cmdMsg);
-//    spin_unlock(&session->spinlock);
+    cmda78_add_cmdMsg(session, cmdMsg);
     cnode   = cmdnode_alloc(cmdMsg->seqNum, cmdMsg->sessionID, cmdMsg->timeStamp, proc);
-//    spin_lock(&session->spinlock);
+
+    spin_lock(&session->spinlock);
     cmdnode_insert(&session->cmdroot, cnode);
     spin_unlock(&session->spinlock);
 
-    retCode = wait_event_interruptible_timeout(cnode->wait, (cnode->code != CMD_ERR_UNKNOWN),	msecs_to_jiffies(timeout));
-    memcpy((int8_t*)cmdMsg, (int8_t*)cnode->cmdMsg, cnode->cmdMsg->cmdSize);
-    cmda78_release_cmdMsg(cnode->cmdMsg);
+    retCode = wait_event_interruptible_timeout(cnode->wait, (cnode->cmdMsg != NULL),	msecs_to_jiffies(timeout));
 
     spin_lock(&session->spinlock);
     errCode = cnode->code;
     cmdnode_delete(&session->cmdroot, cnode);
-    cmdnode_free(cnode);
     spin_unlock(&session->spinlock);
+
+    if (retCode > 0 && cnode->cmdMsg != NULL) {// 成功唤醒，条件已满足 // 此时可以安全地拷贝数据给用户
+        memcpy((int8_t*)cmdMsg, (int8_t*)cnode->cmdMsg, cnode->cmdMsg->cmdSize);
+        cmda78_release_cmdMsg(cnode->cmdMsg);
+        cnode->cmdMsg = NULL;
+    }
+
+    cmdnode_free(cnode);
 
     if (retCode < 0) {// 被信号中断
         return -ERESTARTSYS;
     } else if (retCode == 0) {// 超时
-        printk(KERN_WARNING "timeout!\n");
+        printk(KERN_WARNING "timeout! cmdType=0x%x seqNum=%u sessionID=0x%x code=%d\n",
+               cmdMsg->cmdType, cmdMsg->seqNum, cmdMsg->sessionID, errCode);
         return -ETIMEDOUT;
-    } else {// 成功唤醒，条件已满足 // 此时可以安全地拷贝数据给用户
-        return CMD_ERR_SUCCESS;
     }
 
     return CMD_ERR_SUCCESS;
