@@ -39,7 +39,7 @@ CQueueHandle_t CQueueCreate(uint32_t qSize, uint32_t iSize) {
         return NULL;
     }
 
-    queue = (CQueue_t*)vmalloc(sizeof(CQueue_t));
+    queue = (CQueue_t*)ddr_alloc(sizeof(CQueue_t));
     if (queue == NULL) {
         return NULL;
     }
@@ -52,7 +52,7 @@ CQueueHandle_t CQueueCreate(uint32_t qSize, uint32_t iSize) {
      * 是内存大头,必须走 DDR,避免耗尽本地 RAM FreeRTOS 堆) */
     queue->data  = (uint8_t*)ddr_alloc(qSize * iSize);
     if (queue->data == NULL) {
-        vfree(queue);
+        ddr_free(queue);
         return NULL;
     }
     spin_lock_init(&queue->spinlock);
@@ -67,7 +67,7 @@ void CQueueDelete(CQueueHandle_t handle) {
     if (queue->data != NULL) {
         ddr_free(queue->data);
     }
-    vfree(queue);
+    ddr_free(queue);
 }
 
 uint32_t  CQueueCapacity(CQueueHandle_t handle) {
@@ -79,7 +79,7 @@ uint32_t  CQueueCapacity(CQueueHandle_t handle) {
     return queue->qSize;
 }
 
-uint32_t  CQueueLength(CQueueHandle_t handle) {
+uint32_t  CQueueSize(CQueueHandle_t handle) {
     uint32_t    count = 0;
     CQueue_t* queue = (CQueue_t*)handle;
     if (queue == NULL) {

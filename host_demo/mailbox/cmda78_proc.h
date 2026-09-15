@@ -23,12 +23,7 @@
 extern "C" {
 #endif
 
-
-int32_t    cmda78_send(cmdMsg_t *cmdMsg);
-
-//int32_t cmd_proc(void);
-
-//uint32_t   crc32_calc(const uint8_t *buffer, size_t bufferLength);
+void       cmda78_set_callback(void);
 
 int32_t    cmda78_thread_create(void* arg);
 

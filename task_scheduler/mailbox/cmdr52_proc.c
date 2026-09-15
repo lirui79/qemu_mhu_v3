@@ -16,13 +16,12 @@
 
 
 #include "crc32.h"
-//#include "vcodec.h"
 #include "system.h" /* g_mbx_fc_stat_0 / mhu_poll_rx / mhu_send_fast_event / MHU_FC0_ACK_VALUE */
 #include "cmdr52_mgr.h"
-#include "mhu_v3_r52.h"
 #include "cmdr52_proc.h"
 #include "vcx_vcmd_priv.h"
 #include "vcx_cmdbuf_obj.h"
+
 
 /* R52 每核堆仅 18KB,5 个 vcodec 线程不能用共享的 configMINIMAL_STACK_SIZE(4KB),
  * 统一用 256 words(1KB)专用栈(recv/work/wait 调用链浅,ts_printf 缓冲仅 33B,
@@ -30,33 +29,49 @@
 #define CMDR52_THREAD_STACK_SIZE                        (512)
 
 
+static void doorbell_irq_callback_t(uint32_t irq, uint32_t channel) {
+    core52_mgr_t *core52_mgr = &cmdr52_mgr_get()->ctb[channel / 2];
 
-int32_t cmdr52_send(cmdMsg_t *cmdMsg) {
-    int32_t retCode = 0;
-    uint32_t r52ID = ((cmdMsg->sessionID & 0xFFFF0000) >> 16);
+    if (irq == 0) {
 
-//    ts_printf("%s:%s:%d r52ID:%d started\n", __FILE__, __func__, __LINE__, r52ID);
-    cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-// mailbox_send(cmdMsg);
-    retCode = mhu_v3_send_data(r52ID, (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-    return retCode;
+    } else {
+
+    }
+    ts_printf("doorbell_irq_callback_t\n");
 }
 
+static void fastchan_irq_callback_t(uint32_t irq, uint32_t channel) {
+    core52_mgr_t *core52_mgr = &cmdr52_mgr_get()->ctb[channel / 2];
 
-int32_t    cmdr52_thread_wakeup(uint32_t r52CoreID) {
-    core52_mgr_t *core52_mgr = &cmdr52_mgr_get()->ctb[r52CoreID];
-    atomic_inc(&core52_mgr->refcount);
-    wake_up_interruptible(&core52_mgr->workwaitqueue);
-    return 0;
+    if (irq == 0) {
+
+    } else {
+
+    }
+    ts_printf("fastchan_irq_callback_t\n");
 }
 
-int32_t     cmdr52_thread_wakeup_from_isr(uint32_t r52CoreID, BaseType_t *pxHigherPriorityTaskWoken) {
-    core52_mgr_t *core52_mgr = &cmdr52_mgr_get()->ctb[r52CoreID];
-    atomic_inc_from_isr(&core52_mgr->refcount);
-    wake_up_interruptible_from_isr(&core52_mgr->workwaitqueue, pxHigherPriorityTaskWoken);
-    return 0;
+static void fifochan_irq_callback_t(uint32_t irq, uint32_t channel) {
+    core52_mgr_t *core52_mgr = &cmdr52_mgr_get()->ctb[channel / 2];
+
+    if (irq == 0) {
+        atomic_inc(&core52_mgr->refcount);
+        wake_up_interruptible(&core52_mgr->workwaitqueue);
+    } else {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        atomic_inc_from_isr(&core52_mgr->refcount);
+        wake_up_interruptible_from_isr(&core52_mgr->workwaitqueue, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+ 
+    ts_printf("fifochan_irq_callback_t %u %u\n", irq, channel);
 }
 
+void        cmdr52_set_callback(void) {
+    mhu_set_irq_callback(0, doorbell_irq_callback_t);
+    mhu_set_irq_callback(1, fastchan_irq_callback_t);
+    mhu_set_irq_callback(2, fifochan_irq_callback_t);
+}
 
 /**
  * @brief 初始化接收线程管理器状态
@@ -92,14 +107,14 @@ static void cmdr52_recv_thread_func(void *arg) {
          * 数据也能被及时发现并读出,不会永久锁死。 */
         retCode = wait_event_interruptible_timeout(core52_mgr->workwaitqueue,
                                                    (atomic_read(&core52_mgr->refcount) > 0)
-                                                   || (mhu_rx_data_fill(ch) > 0),
+                                                   || (mhu_fifo_rx_fill(MHU_MBX_BASE, ch) >= CMD_MSG_MIN_SIZE),
                                                    pdMS_TO_TICKS(500));
 
         if (retCode == pdFALSE) {
             continue;   /* 超时未就绪,回到循环顶部继续轮询 */
         }
 
-        if (mhu_rx_data_fill(ch) == 0) {
+        if (mhu_fifo_rx_fill(MHU_MBX_BASE, ch) < CMD_MSG_MIN_SIZE) {
             if (atomic_read(&core52_mgr->refcount) > 0)
                 atomic_dec(&core52_mgr->refcount);
             continue;
@@ -116,9 +131,9 @@ static void cmdr52_recv_thread_func(void *arg) {
 
 
 // mailbox_recv(cmdMsg);
-        code = mhu_v3_recv_data(core52_mgr->r52coreID, (uint8_t *)cmdMsg, &cmdMsg->cmdSize);
+        code = mhu_recv_data(ch, (void*)cmdMsg, CMD_MSG_MAX_SIZE);
 //        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
-        if (code != 0) {
+        if (code <= 0) {
             cmdr52_mgr_cancel_cmdMsg(cmdMsg);
             continue;
         }
@@ -257,6 +272,7 @@ static void cmdr52_wait_thread_func(void *arg) {
         cmdBody->procObj    = session->procObj;// process object id
         cmdr52_session_send(session, cmdMsg);
         vcmd_release_cmdbuf(vcmd_mgr, cmdbuf_id);
+        cmdr52_mgr_release_cmdMsg(cmdMsg);
     }
 
     ts_printf("%s:%s:%d  %u exiting\n", __FILE__, __func__, __LINE__, vcmd_mgr->vcmd_mgr_id);

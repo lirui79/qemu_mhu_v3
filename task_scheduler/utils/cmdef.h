@@ -79,6 +79,17 @@ enum cmdType {
     CMD_EVT_REPORT_CMDBUF_READY    = 0x160,
 
     CMD_VCODEC_MAX                 = 0x1FF,
+
+/*
+*  system r52 interrupt irq cmd between 0x200 to 0x2FF
+*/
+    CMD_INTIRQ_MIN                 = 0x200,
+    CMD_EVT_INTIRQ_MHU             = 0x200,
+    CMD_EVT_INTIRQ_TIMER           = 0x201,
+    CMD_EVT_INTIRQ_VCODEC          = 0x202,
+
+
+    CMD_INTIRQ_MAX                 = 0x2FF,
 };
 
 typedef struct __attribute__((packed, aligned(8))) {
@@ -221,6 +232,18 @@ typedef struct __attribute__((packed, aligned(8))) {//CMD_EVT_REPORT_CMDBUF_READ
     uint16_t       reserve[3];
 } cmdEvtRepCmdBufReady_Body_t;
 
+
+// int irq evt
+typedef struct __attribute__((packed, aligned(8))) {//CMD_EVT_INTIRQ_MHU
+    uint32_t       inttype;// 0 - doorbell  1 - fastchannel  2 - fifo channel
+    uint32_t       channel;// channel
+} cmdEvtIntIrqMhu_Body_t;
+
+// int irq evt
+typedef struct __attribute__((packed, aligned(8))) {//CMD_EVT_INTIRQ_VCODEC
+    uint32_t       vcmdmgr_id;
+    uint32_t       cmdbuf_id; 
+} cmdEvtIntIrqVpu_Body_t;
 
 
 enum cmdError {

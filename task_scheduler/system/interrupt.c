@@ -35,16 +35,36 @@ void vApplicationIRQHandler( uint32_t ulICCIAR)
             }
             break;
         }
+        case IRQ_ID_DMA_COMB: {
+            //dma_combo_irq_handler();
+            break;
+        }
+        case IRQ_ID_DMA_CH_0:
+        case IRQ_ID_DMA_CH_1:
+        case IRQ_ID_DMA_CH_2:
+        case IRQ_ID_DMA_CH_3:
+        case IRQ_ID_DMA_CH_4:
+        case IRQ_ID_DMA_CH_5:
+        case IRQ_ID_DMA_CH_6:
+        case IRQ_ID_DMA_CH_7: {
+            //dma_irq_handler(interrupt_id - IRQ_ID_DMA_CH_0);
+            break;
+        }
+        case IRQ_ID_DMA_COMMON: {
+            //dma_common_irq_handler();
+            break;
+        }
         case IRQ_ID_MHU_PBX_COMB: {
             mhu_pbx_isr();
             break;
         }
         case IRQ_ID_MHU_MBX_COMB: {
             mhu_mbx_isr();
+            //ts_info("CPU:%u IRQ:%u\n", ulCpuID, ulInterruptID);
             break;
         }
         default: {
-            ts_printf("Fatal: unhandled interrupt %d\n", ulInterruptID);
+            ts_err("Fatal: unhandled interrupt %d\n", ulInterruptID);
             while (1){};
             break;
         }

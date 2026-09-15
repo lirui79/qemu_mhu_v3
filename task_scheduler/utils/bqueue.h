@@ -32,9 +32,9 @@ BQueueHandle_t BQueueCreate(uint32_t qSize, uint32_t iSize);
 
 void           BQueueDelete(BQueueHandle_t handle);
 
-uint32_t       BQueueSize(BQueueHandle_t handle);
+uint32_t       BQueueCapacity(BQueueHandle_t handle);
 
-uint32_t       BQueueLength(BQueueHandle_t handle);
+uint32_t       BQueueSize(BQueueHandle_t handle);
 
 uint32_t       BQueueItemSize(BQueueHandle_t handle);
 

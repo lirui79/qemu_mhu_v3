@@ -55,7 +55,6 @@ struct cmdbuf_obj {
 	u8                 slice_run_done;
 	u8                 line_buffer_run_done;
     struct proc_obj   *po;
-//    void              *session;//cmdr52_session_t  *session;
 };
 
 

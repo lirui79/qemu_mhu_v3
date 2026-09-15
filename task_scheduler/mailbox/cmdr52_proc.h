@@ -23,17 +23,12 @@
 extern "C" {
 #endif
 
-
-int32_t     cmdr52_send(cmdMsg_t *cmdMsg);
-
+void        cmdr52_set_callback(void);
 
 int32_t     cmdr52_thread_create(void* arg);
 
 int32_t     cmdr52_thread_stop(void* arg);
 
-int32_t     cmdr52_thread_wakeup(uint32_t r52CoreID);
-
-int32_t     cmdr52_thread_wakeup_from_isr(uint32_t r52CoreID, BaseType_t *pxHigherPriorityTaskWoken);
 
 #ifdef __cplusplus
 }

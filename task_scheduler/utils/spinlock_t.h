@@ -11,35 +11,34 @@
 **                  on all copies and should not be removed.                    **
 **                                                                              **
 **********************************************************************************
-**                         include vcx irq timer header                         **
+**                       include spinlock_t headers                             **
 *********************************************************************************/
 
-#ifndef _VCX_IRQ_TIMER_H_
-#define _VCX_IRQ_TIMER_H_
+#ifndef _SPIN_LOCK_T_H_
+#define _SPIN_LOCK_T_H_
 
-#include "vcx_vcmd_priv.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define TIMEOUT_IRQ_TIMER
-
-#ifdef  TIMEOUT_IRQ_TIMER
-
-void _vcmd_timeout_create_timer(struct hantrovcmd_dev *dev, unsigned int timeout);
-
-void _vcmd_timeout_delete_timer(struct hantrovcmd_dev *dev);
-
-void _vcmd_timeout_start_timer(struct hantrovcmd_dev *dev);
-
-void _vcmd_timeout_stop_timer(struct hantrovcmd_dev *dev);
 
 
-#endif
+
+/* mutex */
+typedef   UBaseType_t  spinlock_t;
+#define   spin_lock_init(x) do {*(x) = pdFALSE;} while(0)
+#define   spin_lock(x)  do { *(x) = 0; taskENTER_CRITICAL();} while(0)
+#define   spin_unlock(x)  do { *(x) = 0; taskEXIT_CRITICAL();} while(0)
+#define   spin_lock_irqsave(x, flag)   do { *(x) = 0; flag = taskENTER_CRITICAL_FROM_ISR();} while(0)
+#define   spin_unlock_irqrestore(x, flag) do { *(x) = 0; taskEXIT_CRITICAL_FROM_ISR(flag);} while(0)
+
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /*_VCX_IRQ_TIMER_H_*/
+
+#endif /* _SPIN_LOCK_T_H_ */

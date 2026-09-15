@@ -20,7 +20,6 @@
 #include "vcx_cmdbuf_obj.h"
 #include "vcx_vcmd_dbgfs.h"
 #include "vcx_vcmd_dbg_log.h"
-#include "vcx_irq_simulation.h"
 
 
 /*---------------------------------------------------------------
@@ -323,7 +322,6 @@ void proc_add_done_job(vcmd_mgr_t *vcmd_mgr, struct cmdbuf_obj *obj)
 	is_wait = vcmd_mgr->in_wait;
 	vcmd_mgr->in_wait = 0;
 	bi_list_insert_node_tail(list, &vcmd_mgr->po_jobs[id]);
-
 	spin_unlock_irqrestore(&vcmd_mgr->job_lock, flags);
 
 	if (is_empty || is_wait) {//wake_up_interruptible_all(&po->job_waitq);

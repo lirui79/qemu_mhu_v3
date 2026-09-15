@@ -141,6 +141,5 @@ void process_vce_abn_irq(vcmd_mgr_t *vcmd_mgr, struct hantrovcmd_dev *dev,
 		process_vce_line_buffer_irq(vcmd_mgr, hwregs, obj, irq);
 	}
 	spin_unlock_irqrestore(&dev->abn_irq_lock, flags);
-
 }
 

@@ -14,7 +14,7 @@
 **                           *.c mhu v3 source code                             **
 *********************************************************************************/
 
-#include "inc.h"
+#include "cmdef.h"
 #include "vcx_priv.h"
 #include "mhu_v3_priv.h"
 #include "mhu_v3_client.h"
@@ -24,6 +24,27 @@
 #include <linux/completion.h>
 #include <linux/interrupt.h>
 
+#include <linux/timekeeping.h>
+#include <linux/time64.h>
+
+/* polling timeout in milliseconds */
+#define MHU_WAIT_TIMEOUT    (500)
+
+/* MFFCW_CTRL register bits */
+#define MFFCW_CTRL_FF           (1U << 31U)
+#define MFFCW_CTRL_MSBF         (1U << 1U)
+#define MFFCW_CTRL_MBX_COMB_EN  (1U << 0U)
+
+/* MFFCW_FLG32 field masks */
+#define MFFCW_FLG_VFLG(m)       (1U << (2U + 4U*(m)))
+#define MFFCW_FLG_FLG_SHIFT(m)  (0U + 4U*(m))
+#define MFFCW_FLG_FLG_MASK      0x3U
+
+/* FLG field encoding */
+#define MHU_FLG_PAYLOAD     0x00U
+#define MHU_FLG_SOT         0x01U
+#define MHU_FLG_EOT         0x02U
+#define MHU_FLG_SOT_EOT     0x03U
 
 typedef enum {
     INT_PRIO_LOWEST   = 0xFF,
@@ -66,107 +87,180 @@ static struct mhu_v3_manager  g_mhu_v3_mgr;
 
 
 
+static uint64_t get_arch_timer_ms(void) {
+    struct timespec64 ts;
+    uint64_t ms;
+    // 获取 timespec64 结构体
+    ktime_get_boottime_ts64(&ts);    // 转换为毫秒: 秒 * 1000 + 纳秒 / 1,000,000
+    ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return ms;
+}
+
+/*
+ * 等待本通道出现可取走的完整报文。
+ * 返回 1: 有报文可取; 0: 超时且暂无完整报文(调用者应回到循环重新判定); -1: 被信号打断。
+ *
+ * 必须带超时兜底: 平台 MHU 组合中断投递不可靠(实测偶发 ISR 不触发, R52 侧已有
+ * 同样的兜底), 且 IRQ handler 进入时会关闭本通道 INT_EN。若只依赖中断唤醒,
+ * 数据会一直锁存在 FIFO 里无人处理 -> 上层请求必然 "timeout!"。
+ */
 int mhu_v3_wait_event_interruptible(uint32_t r52id) {
     struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
     uint32_t ch = 2 * r52id + 1;
-    if (wait_event_interruptible(mgr->ffwait[ch], atomic64_read(&mgr->ffcompleted[ch]) > 0)) {
+    long     ret;
+
+    ret = wait_event_interruptible_timeout(mgr->ffwait[ch],
+                   (atomic64_read(&mgr->ffcompleted[ch]) > 0) ||
+                   (mhu_fifo_rx_fill(mgr->mbx, ch) >= CMD_MSG_MIN_SIZE),
+                   msecs_to_jiffies(500));
+    if (ret < 0) {
         printk("mhu_v3_wait_event_interruptible: signal %s\n", __func__);
         return -1;
     }
 
-    return 0;
+    return (ret == 0) ? 0 : 1;
+}
+
+/*
+ * 收包收尾: 消费一次唤醒计数, 清中断状态并重新使能本通道中断。
+ * mhu_v3_recv_data 的每一条退出路径(收满一包/等待超时放弃)都必须调用它,
+ * 否则会带着 INT_EN=0 回到等待: handler 进入时会把通道 INT_EN 清 0(电平触发,
+ * 防中断风暴), 之后即使对端继续 push 数据也不会再产生中断, 接收线程永久睡眠,
+ * 该包(应答)永远不会被取出 -> 上层表现为请求 "timeout!"。
+ *
+ * 顺序要求: 先 ffcompleted--(消费唤醒), 最后写 INT_EN 使能。
+ * handler 是 "写 INT_EN=0 -> clear -> ffcompleted++ -> wake" 且不持本锁, 可以在
+ * 任意时刻抢占进来; 若先使能再 dec, handler 可能正好插在中间, 随后我们又把它
+ * 刚加的 1 减掉, 于是出现 "INT_EN=0 且 ffcompleted=0"; 此时若 FIFO 里只有下一个
+ * 包的前半部分(fill < CMD_MSG_MIN_SIZE), 等待条件
+ * (ffcompleted>0 || fill>=CMD_MSG_MIN_SIZE) 为假, 接收线程会永久睡眠。
+ * 把使能放在最后, handler 的唤醒脉冲就不会被本次收包吃掉。
+ */
+static void mhu_v3_rx_rearm(struct mhu_v3_manager *mgr, uint32_t r52id, uint32_t ch) {
+    uint32_t st;
+
+    atomic64_dec(&mgr->ffcompleted[ch]);
+
+    spin_lock(&mgr->rlock[r52id]);
+    st = mhu_read32(mgr->mbx + MHU_MBX_FFCW_INT_ST(ch));
+    if (st) {
+        mhu_fifo_clear_rx_irq(mgr->mbx, ch, st);
+    }
+    mhu_write32(mgr->mbx + MHU_MBX_FFCW_INT_EN(ch), 0xFFFFFFFF);
+    spin_unlock(&mgr->rlock[r52id]);
 }
 
 /*
  * Recv 128-byte data via Mailbox
  */
-int mhu_v3_recv_data(uint32_t r52id, u8 *data, uint32_t size) {
+int mhu_v3_recv_data(uint32_t r52id, u8 *buf_ptr, uint32_t buf_len) {
     uint32_t ch = 2 * r52id + 1;
     struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
-    uint32_t *dwptr = (uint32_t*)data, buf_len = size;
-    uint32_t  dwlen = (buf_len / 4);
-    uint32_t  fill, val, len = 0, i = 0,st;
-    uint32_t  flags, stale;
-    uint8_t   sot = 0, eot = 0;
+    uint32_t *dwptr = (uint32_t*)buf_ptr;
+    uint32_t  dwlen = (buf_len / 4U);
+    uint32_t  fill, val, len = 0U;
+    uint32_t  flg_val, flg32_reg, ctrl_reg, vflg_valid;
+    uint8_t   sot = 0U, eot = 0U;
+    uint64_t  timeout = get_arch_timer_ms() + 500;
+
+    sot = 0U;
+    eot = 0U;
+    len = 0U;
 
     if ((buf_len % 4) != 0) {
         printk("MHUS: invalid len %u\n", buf_len);
-        return -1;
+        return 0U;
     }
 
+    /* wait for at least one word in fifo */
+    do {
+        fill   = mhu_fifo_rx_fill(mgr->mbx , ch);
+        if(timeout <= get_arch_timer_ms()) {
+            if (fill >= CMD_MSG_MIN_SIZE) {
+                break;
+            }
+
+            //ts_printf("mhu: fifo%u timeout on empty\n", ch);
+            mhu_v3_rx_rearm(mgr, r52id, ch);
+            return 0U;
+        }
+    } while (fill < CMD_MSG_MIN_SIZE);
+
+    timeout = get_arch_timer_ms() + 500;
     while (1) {
         if (len >= dwlen) {
             printk("MBX: no enough buffer, len=%u\n", buf_len);
             break;
         }
 
-        /* wait for fifo data */
+        /* wait for at least one word in fifo */
         do {
-            st   = mhu_read32(mgr->mbx + MHU_MBX_FFCW_ST(ch));
-            fill = st & 0x7FF;
+            fill   = mhu_fifo_rx_fill(mgr->mbx, ch);
+            if(timeout <= get_arch_timer_ms()) {
+                if (fill > 0) {
+                    break;
+                }
+
+                //ts_printf("mhu: fifo%u timeout on empty\n", ch);
+                mhu_v3_rx_rearm(mgr, r52id, ch);
+                return 0U;
+            }
         } while (!fill);
 
         /* pop data and flag from fifo */
 	    spin_lock(&mgr->rlock[r52id]);
         val   = mhu_fifo_pop32(mgr->mbx, ch);
-        flags = mhu_read32(mgr->mbx + MHU_MBX_FFCW_FLG(ch));
-        stale = mhu_read32(mgr->mbx + MHU_MBX_FFCW_CTRL(ch));
+        flg32_reg = mhu_read32(mgr->mbx + MHU_MBX_FFCW_FLG(ch));
+        ctrl_reg = mhu_read32(mgr->mbx + MHU_MBX_FFCW_CTRL(ch));
 	    spin_unlock(&mgr->rlock[r52id]);
 
-//      printk("MBX: data=0x%x flg=0x%x stale=0x%x st=0x%x\n", val, flags, stale, st);
-        if (flags & 0x4) {// 0
-            if ((flags & 0x1) != 0)
-                sot = 1;
-            if ((flags & 0x2) != 0)
-                eot = 1;
-        }
-        if (flags & (0x4 << 4)) {// 1
-            if ((flags & (0x1 << 4)) != 0)
-                sot = 1;
-            if ((flags & (0x2 << 4)) != 0)
-                eot = 1;
-        }
-        if (flags & (0x4 << 8)) {// 1
-            if ((flags & (0x1 << 8)) != 0)
-                sot = 1;
-            if ((flags & (0x2 << 8)) != 0)
-                eot = 1;
-        }
-        if (flags & (0x4 << 12)) {// 1
-            if ((flags & (0x1 << 12)) != 0)
-                sot = 1;
-            if ((flags & (0x2 << 12)) != 0)
-                eot = 1;
+         /* MSBF=0 → latest pop word is FLG0; MSBF=1 → latest pop word is FLG3 */
+        if ((sot == 0) || (eot == 0)) {
+            vflg_valid = ((flg32_reg & MFFCW_FLG_VFLG(0)) != 0U);
+            if (vflg_valid) {
+                flg_val    = (flg32_reg >> MFFCW_FLG_FLG_SHIFT(0)) & MFFCW_FLG_FLG_MASK;
+                if (sot == 0) {
+                    sot = ((flg_val == MHU_FLG_SOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+                if (eot == 0) {
+                    eot = ((flg_val == MHU_FLG_EOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+            }
         }
 
-        /* check for start of transfer boundary */
-        if (!sot) {
-            printk("MBX: invalid SOT, drop 0x%x\n", val);
+        if ((sot == 0) || (eot == 0)) {
+            vflg_valid = ((flg32_reg & MFFCW_FLG_VFLG(3)) != 0U);
+            if (vflg_valid) {
+                flg_val    = (flg32_reg >> MFFCW_FLG_FLG_SHIFT(3)) & MFFCW_FLG_FLG_MASK;
+                if (sot == 0) {
+                    sot = ((flg_val == MHU_FLG_SOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+                if (eot == 0) {
+                    eot = ((flg_val == MHU_FLG_EOT) || (flg_val == MHU_FLG_SOT_EOT)) ? 1U : 0U;
+                }
+            }
+        }
+
+        /* drop garbage data before SOT arrives */
+        if(!sot && len == 0U) {
+            printk("MBX: drop pre-SOT garbage word 0x%08x ch=%u\n", val, ch);
             continue;
         }
 
-        /* save data into user buffer */
         dwptr[len++] = val;
 
-        /* check for end of transfer boundary */
-        if (eot)
+        if(eot) {
+            /* complete one full packet */
             break;
+        }
     }
 
-	spin_lock(&mgr->rlock[r52id]);
-    /* check if more data is pending */
-    fill = mhu_fifo_rx_fill(mgr->mbx, ch);
-    if (!fill) {
-        stale = mhu_read32(mgr->mbx + MHU_MBX_FFCW_INT_ST(ch));
-        if (stale) {
-            mhu_fifo_clear_rx_irq(mgr->mbx, ch, stale);
-        }
-        mhu_write32(mgr->mbx + MHU_MBX_FFCW_INT_EN(ch), 0xFFFFFFFF);
-    }
-	spin_unlock(&mgr->rlock[r52id]);
+    /* 收满一包: 消费唤醒计数并重新武装本通道中断(必须无条件, 含 FIFO 里还残留
+     * 下一个包前半部分的情况; 残留 >= CMD_MSG_MIN_SIZE 时等待条件本身就会立即
+     * 返回并收取, 不会重复处理已收数据)。详见 mhu_v3_rx_rearm 的说明。 */
+    mhu_v3_rx_rearm(mgr, r52id, ch);
 //    printk("MHU V3: Received and copied %d bytes of data.\n", *size);
-    atomic64_dec(&mgr->ffcompleted[i]);
-    return 0;
+    return (len * 4U);
 }
 
 /*
@@ -177,10 +271,20 @@ int mhu_v3_send_data(uint32_t r52id, const u8 *data_ptr, uint32_t data_len) {
     struct mhu_v3_manager *mgr    = (struct mhu_v3_manager *)(vcx_get_private(DEVID_VCX)->priv);
     uint32_t *dwptr = (uint32_t*)data_ptr;
     uint32_t  dwlen = data_len / 4;
-    uint32_t  i, flg;
+    uint32_t  i, flg, free;
+    uint64_t  timeout = get_arch_timer_ms() + 500;
     if ((data_len % 4) != 0) {
         printk("MHUS: invalid len %u\n", data_len);
-        return -1;
+        return 0;
+    }
+    /* wait until fifo has enough space */
+    do {
+        free = mhu_read32(mgr->pbx + MHU_PBX_FFCW_PAY(ch)) & 0x7FF;
+    } while ((free < data_len) && (timeout > get_arch_timer_ms()));
+
+    if (free < data_len) {
+        printk("mhu: fifo%u timeout on full (%u < %u)\n", ch, free, data_len);
+        return 0;
     }
 
 	spin_lock(&mgr->wlock[r52id]);

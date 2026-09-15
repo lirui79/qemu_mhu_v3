@@ -17,7 +17,7 @@
 #ifndef _VCD_VCMD_PM_H_
 #define _VCD_VCMD_PM_H_
 
-#define CONFIG_DEC_PM
+//#define CONFIG_DEC_PM
 
 
 #ifdef __cplusplus

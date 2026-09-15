@@ -23,14 +23,15 @@ CODE_TYPE ?= thumb
 
 # Optimization level: 0~3, g
 # 用 -Os 压缩代码体积以在 96KB 本地 RAM 内放下代码+数据镜像。如需完整调试信息可临时改回 1
-OPT_LEVEL ?= s
+OPT_LEVEL ?= 1
 
 # Debug option
 #DEBUG_FLAGS ?=
 DEBUG_FLAGS ?= -g
 
 # Tool setup
-TOOLCHAIN        := /home/stone/tools/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi
+#TOOLCHAIN        := /home/stone/tools/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi
+TOOLCHAIN        := arm-none-eabi
 
 AS           	 := $(TOOLCHAIN)-as
 CC           	 := $(TOOLCHAIN)-gcc
@@ -59,21 +60,18 @@ INCLUDES       := \
 	-I$(GCC_PORT_DIR)
 
 
-#	-I$(PROJ_ROOT)/task \
+#
 # ==============================================================================
 # Source Files
 # 【关键补充】必须添加 arch/start.S 启动汇编，提供 _start 入口
 # ==============================================================================
 # 1. 应用层C代码
 APP_SRCS       := \
-    $(PROJ_ROOT)/system/test.c \
-    $(PROJ_ROOT)/system/aql_proc.c \
     $(PROJ_ROOT)/driver/gicv3_basic.c \
     $(PROJ_ROOT)/driver/mhu_davarae.c \
     $(PROJ_ROOT)/driver/uart_pl011.c \
     $(PROJ_ROOT)/system/interrupt.c \
     $(PROJ_ROOT)/system/timer.c \
-    $(PROJ_ROOT)/system/processor.c \
     $(PROJ_ROOT)/system/debug.c \
     $(PROJ_ROOT)/system/syscall.c \
     $(PROJ_ROOT)/system/main.c
@@ -108,11 +106,9 @@ STARTUP_ASM    := \
 VCODEC_SRCS    := \
     $(PROJ_ROOT)/mailbox/cmdr52_proc.c \
     $(PROJ_ROOT)/mailbox/cmdr52_mgr.c \
-    $(PROJ_ROOT)/mailbox/mhu_v3_r52.c \
     $(PROJ_ROOT)/mailbox/cmdr52_session.c \
     $(PROJ_ROOT)/utils/kref.c \
     $(PROJ_ROOT)/utils/crc32.c \
-    $(PROJ_ROOT)/utils/rbtree.c \
     $(PROJ_ROOT)/utils/bqueue.c \
     $(PROJ_ROOT)/utils/cqueue.c \
     $(PROJ_ROOT)/utils/ddr_mem.c \
@@ -129,8 +125,6 @@ VCODEC_SRCS    := \
     $(PROJ_ROOT)/vcodec/vcx_axi2to1.c \
     $(PROJ_ROOT)/vcodec/vcx_axife.c \
     $(PROJ_ROOT)/vcodec/vcx_cmdbuf_obj.c \
-    $(PROJ_ROOT)/vcodec/vcx_irq_simulation.c \
-    $(PROJ_ROOT)/vcodec/vcx_irq_timer.c \
     $(PROJ_ROOT)/vcodec/vcx_kthread.c \
     $(PROJ_ROOT)/vcodec/vcx_vcmd_dbg_log.c \
     $(PROJ_ROOT)/vcodec/vcx_vcmd_dbgfs.c \

@@ -78,6 +78,16 @@ uint64_t arch_get_time_ns(void)
     return (get_sys_counter() * 1000 / SYS_FREQ_MHZ);
 }
 
+uint64_t arch_get_time_us(void)
+{
+    return (get_sys_counter() / SYS_FREQ_MHZ);
+}
+
+uint64_t arch_get_time_ms(void)
+{
+    return (get_sys_counter() / SYS_FREQ_KHZ);
+}
+
 /* FreeRTOS tick hooks required by the ARM_AARCH64 port.
  * See FreeRTOSConfig.h: configSETUP_TICK_INTERRUPT / configCLEAR_TICK_INTERRUPT. */
 void vPortSetupTimerInterrupt(void)
@@ -93,5 +103,23 @@ void generic_timer_clear_irq(void)
 {
     /* reprogram the timer to clear the interrupt condition */
     set_timer_value(g_tick_period);
+}
+
+int time_after(uint64_t expire_ms)
+{
+    /* true if the current time has passed expire_ms (wrap safe) */
+    if (arch_get_time_ms() > expire_ms) {
+        return 1;
+    }
+    return 0;
+}
+
+int time_before(uint64_t expire_ms)
+{
+    /* true if the current time has not yet reached expire_ms (wrap safe) */
+    if (arch_get_time_ms() > expire_ms) {
+        return 0;
+    }
+    return 1;
 }
 

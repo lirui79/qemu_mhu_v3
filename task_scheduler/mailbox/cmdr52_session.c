@@ -14,7 +14,7 @@
 **                      include command r52 session source                      **
 *********************************************************************************/
 
-
+#include "crc32.h"
 #include "cmdr52_mgr.h"
 #include "cmdr52_proc.h"
 #include "cmdr52_session.h"
@@ -46,6 +46,7 @@ int32_t        cmdr52_session_check(cmdr52_session_t *session, cmdMsg_t *cmdMsg)
         cmdSBody->procObj   = session->procObj;
         cmdSBody->timeStamp = cmdMsg->timeStamp;
         cmdr52_session_send(session, cmdSMsg);
+        cmdr52_mgr_release_cmdMsg(cmdSMsg);
         return CMD_ERR_INVALID_SEQUENCEID;
     }
     session->seqRNum++;
@@ -88,7 +89,9 @@ static int32_t cmd_system_open_session(cmdr52_session_t *session, cmdMsg_t *cmdM
     cmdSBody->code       = retCode;
 
     ts_printf("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, r52CoreID, cmdr52_session->sessionID);
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 static int32_t cmd_system_close_session(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
@@ -123,7 +126,9 @@ static int32_t cmd_system_close_session(cmdr52_session_t *session, cmdMsg_t *cmd
     cmdSBody->procObj    = cmdBody->procObj;
 
     ts_printf("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, ((session->sessionID & 0xFFFF0000) >> 16), cmdr52_session->sessionID);
-    return cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 int32_t        cmdr52_session_system(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
@@ -174,7 +179,9 @@ static int32_t          vcodec_run_cmdbuf(cmdr52_session_t *session, cmdMsg_t *c
     cmdSBody->vcmdmgr_id = cmdBody->vcmdmgr_id;
     cmdSBody->cmdbuf_id  = cmdBody->cmdbuf_id;
     cmdSBody->core_id    = cmdBody->core_id;
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 static int32_t          vcodec_ctrl_cmdbuf(cmdr52_session_t *session, cmdMsg_t *cmdMsg){
@@ -219,7 +226,9 @@ static int32_t          vcodec_ctrl_cmdbuf(cmdr52_session_t *session, cmdMsg_t *
     }
 
     cmdSBody->code       = retCode;
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 static int32_t          vcodec_drop_owner(cmdr52_session_t *session, cmdMsg_t *cmdMsg){
@@ -250,7 +259,9 @@ static int32_t          vcodec_drop_owner(cmdr52_session_t *session, cmdMsg_t *c
     }
 
     cmdSBody->code       = retCode;
-    return  cmdr52_session_send(session, cmdSMsg);
+    retCode = cmdr52_session_send(session, cmdSMsg);
+    cmdr52_mgr_release_cmdMsg(cmdSMsg);
+    return retCode;
 }
 
 int32_t        cmdr52_session_vcodec(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
@@ -269,20 +280,22 @@ int32_t        cmdr52_session_vcodec(cmdr52_session_t *session, cmdMsg_t *cmdMsg
     default:
         break;
     }
+
     return 0;
 }
 
 int32_t        cmdr52_session_send(cmdr52_session_t *session, cmdMsg_t *cmdMsg) {
-    int32_t code = 0;
+    uint32_t ch = 2 * ((session->sessionID & 0xFFFF0000) >> 16) + 1, snsz = 0;// 0 r52   0- channel a78 -> r52   1- channel r52 -> a78 ; 1 r52   2- channel a78 -> r52   3- channel r52 -> a78 
     cmdMsg->sessionID    = session->sessionID;
     cmdMsg->timeStamp    = 0x00000000;
     spin_lock(&session->spinlock);
     cmdMsg->seqNum       = session->seqSNum++;
-    code = cmdr52_send(cmdMsg);
+    cmdMsg->crc32        = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
+    snsz                 = mhu_send_data(ch, (void*)cmdMsg, cmdMsg->cmdSize);
     spin_unlock(&session->spinlock);
-    cmdr52_mgr_release_cmdMsg(cmdMsg);
-    return code;
+    if (snsz != cmdMsg->cmdSize) {
+        ts_printf("Failed to send create process cmd, ret %u\n", snsz);
+        return -1;
+    }
+    return 0;
 }
-
-
-

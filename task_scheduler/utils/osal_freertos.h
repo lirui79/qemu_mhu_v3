@@ -20,11 +20,12 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
-#include "atomic.h"
+#include "atomic_t.h"
 #include "semphr.h"
 #include "timers.h"
-#include "spinlock.h"
+#include "spinlock_t.h"
 #include "system.h"
+#include "ddr_mem.h"
 #include <stdio.h>
 #include <stddef.h>
 #include <string.h>

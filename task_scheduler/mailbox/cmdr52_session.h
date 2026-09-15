@@ -19,7 +19,7 @@
 
 
 #include "cmdef.h"
-#include "spinlock.h"
+#include "spinlock_t.h"
 
 #ifdef __cplusplus
 extern "C" {

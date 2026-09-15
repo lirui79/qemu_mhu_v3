@@ -22,6 +22,10 @@
 
 #include <stdint.h>
 
+/* ------------------------------------------------------------------ */
+/* Register map                                                       */
+/* ------------------------------------------------------------------ */
+
 /* ===================== PBX (Sender / Postbox) offsets ===================== */
 #define MHU_PBX_DBCH_CFG0           0x20u
 #define MHU_PBX_FFCH_CFG0           0x30u
@@ -184,18 +188,12 @@ static inline void mhu_fifo_push32(uintptr_t pbx_base, unsigned ch, uint32_t val
 
 static inline uint32_t mhu_fifo_pop32(uintptr_t mbx_base, unsigned ch)
 {
-    /* 平台 MHU 模型(PAY 流式):读 MFFCW_PAY(RA_EN)弹出,必须再读一次
-     * MFFCW_FLG 推进 FIFO 读指针(参考 runtime_demo/driver/r52_gpu_drv.c
-     * r52_gpu_receive_words)。不能用 0x2028 FIFO_POP(模型不识别,返回
-     * 填充垃圾且不推进 → 数据错乱)。 */
-    uint32_t v = mhu_read32(mbx_base + MHU_MBX_FFCW_PAY(ch));
-    mhu_read32(mbx_base + MHU_MBX_FFCW_FLG(ch));
-    return v;
+    return mhu_read32(mbx_base + MHU_MBX_FFCW_PAY(ch));
 }
 
 static inline uint32_t mhu_fifo_rx_fill(uintptr_t mbx_base, unsigned ch)
 {
-    return mhu_read32(mbx_base + MHU_MBX_FFCW_ST(ch)) & 0xFFFFu;
+    return (mhu_read32(mbx_base + MHU_MBX_FFCW_ST(ch)) & 0x7FF);
 }
 
 static inline void mhu_fifo_clear_rx_irq(uintptr_t mbx_base, unsigned ch, uint32_t bits)
@@ -211,5 +209,110 @@ static inline void mhu_fifo_kick_data(uintptr_t pbx_base, unsigned ch,
     mhu_write32(pbx_base + MHU_PBX_FFCW_DATA_LEN(ch), data_len);
     mhu_write32(pbx_base + MHU_PBX_FFCW_CTRL(ch), MHU_FF_CTRL_KICK_DATA);
 }
+
+/* ------------------------------------------------------------------ */
+/* API                                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @brief  Initialize MHU controller
+ * @return TS_OK for success, TS_ERR_* for errors
+ */
+int mhu_init(void);
+
+/**
+ * @brief  MHU postbox interrupt handler
+ * @return None
+ */
+void mhu_pbx_isr(void);
+
+/**
+ * @brief  MHU mailbox interrupt handler
+ * @return None
+ */
+void mhu_mbx_isr(void);
+
+/**
+ * @brief  Send an event using a doorbell channel
+ * @param  ch: doorbell channel number
+ * @param  event: event bits to signal
+ * @return None
+ */
+void mhu_send_event(uint32_t ch, uint32_t event);
+
+/**
+ * @brief  Block until the requested event bits arrive on a doorbell channel,
+ *         then return them and clear them from the pending status
+ * @param  ch: doorbell channel number
+ * @param  event: event bits to wait for
+ * @return the received event bits, 0 if the channel is not supported
+ */
+uint32_t mhu_wait_event(uint32_t ch, uint32_t event);
+
+/**
+ * @brief  Clear pending event bits on the receiver doorbell channel
+ * @param  ch: doorbell channel number
+ * @param  event: event bits to clear
+ * @return None
+ */
+void mhu_clear_event(uint32_t ch, uint32_t event);
+
+/**
+ * @brief  Send data using a FIFO channel; the first word is flagged SOT and
+ *         the last word EOT+ACK
+ * @param  ch: FIFO channel number
+ * @param  data_ptr: pointer to data to send
+ * @param  data_len: data length in bytes, must be a multiple of 4
+ * @return data_len for success, 0 for an invalid length
+ */
+uint32_t mhu_send_data(uint32_t ch, void *data_ptr, uint32_t data_len);
+
+/**
+ * @brief  Receive data from a FIFO channel until EOT; drops words before the
+ *         SOT boundary and stops early if the buffer is exhausted
+ * @param  ch: FIFO channel number
+ * @param  buf_ptr: pointer to receive buffer
+ * @param  buf_len: buffer length in bytes, must be a multiple of 4
+ * @return number of bytes received, 0 for an invalid length
+ */
+uint32_t mhu_recv_data(uint32_t ch, void *buf_ptr, uint32_t buf_len);
+
+/**
+ * @brief  Check if data is ready on a FIFO channel
+ * @param  ch: FIFO channel number
+ * @return 1 if data is pending, 0 otherwise
+ */
+int mhu_is_data_ready(uint32_t ch);
+
+/**
+ * @brief  Send a 32-bit value using a fast channel
+ * @param  ch: fast channel numbermhu_fifo_rx_fill
+ * @param  value: value to send
+ * @return None
+ */
+void mhu_send_fast_event(uint32_t ch, uint32_t value);
+
+/**
+ * @brief  Return and clear the pending fast channel event bits
+ * @return bitmask of the fast channels that have signaled
+ */
+uint32_t mhu_take_fast_events(void);
+
+/**
+ * @brief  Get the value received on a fast channel
+ * @param  ch: fast channel number
+ * @return the received value, 0 if the channel number is out of range
+ */
+uint32_t mhu_get_fast_event_value(uint32_t ch);
+
+/* pending status variables, updated by mhu_mbx_isr() */
+extern volatile uint32_t g_mbx_db_stat_0;   /* doorbell channel 0 event bits */
+extern volatile uint32_t g_mbx_ff_stat_0;   /* FIFO channel 0~31 status bits */
+extern volatile uint32_t g_mbx_fc_stat_0;   /* fast channel 0~31 event bits */
+
+/* interrupt pending checks (MHU_DB/FF/FC_SIGNALED) */
+#define MHU_DB_SIGNALED     (g_mbx_db_stat_0 != 0)
+#define MHU_FF_SIGNALED     (g_mbx_ff_stat_0 != 0)
+#define MHU_FC_SIGNALED     (g_mbx_fc_stat_0 != 0)
 
 #endif

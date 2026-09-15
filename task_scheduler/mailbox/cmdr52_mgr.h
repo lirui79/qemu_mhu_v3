@@ -20,7 +20,7 @@
 
 #include "cmdef.h"
 #include "bqueue.h"
-#include "spinlock.h"
+#include "spinlock_t.h"
 #include "atomic_t.h"
 #include "wait_queue.h"
 #include "cmdr52_session.h"
@@ -39,7 +39,7 @@ typedef struct {
     uint32_t           vtb_size;//
     cmdr52_session_t   vtb[CMD_SESSION_MAX];// vcodec session table
     spinlock_t         spinlock;
-	wait_queue_head_t  workwaitqueue;
+    wait_queue_head_t  workwaitqueue;
     atomic_t           refcount;
 } core52_mgr_t;
 
@@ -51,7 +51,7 @@ typedef struct {
     TaskHandle_t       work_thread;
     TaskHandle_t       wait_thread[VCMD_MGR_ID_MAX];// vcmd mgr wait thread for irq cmdbuf done
     BQueueHandle_t     cmd_queue;// command queue
-	wait_queue_head_t  workwaitqueue;
+    wait_queue_head_t  workwaitqueue;
     atomic_t           refcount;
 } cmdr52_mgr_t;
 
@@ -81,16 +81,6 @@ int32_t              cmdr52_mgr_queue_cmdMsg(cmdMsg_t* cmdMsg);
 int32_t              cmdr52_mgr_cancel_cmdMsg(cmdMsg_t* cmdMsg);
 
 int32_t              cmdr52_mgr_proc_cmdMsg(cmdMsg_t *cmdMsg);
-
-
-
-
-int32_t              vcmd_wait_cmdbuf(vcmd_mgr_t *vcmd_mgr);
-
-//int32_t              vcmd_link_and_rum_cmdbuf(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, cmdReqRunCmdBuf_Body_t *cmd_body);
-
-//int32_t              vcmd_drop_owner(vcmd_mgr_t *vcmd_mgr, cmdr52_session_t *session, uint64_t ownerID, cmdRspDropOwner_Body_t *cmd_body);
-
 
 #ifdef __cplusplus
 }

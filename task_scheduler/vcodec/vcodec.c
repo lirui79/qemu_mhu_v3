@@ -73,7 +73,7 @@ int32_t          vcodec_init_vcmd(cmdMsg_t *cmdMsg) {
 int32_t          vcx_vcmd_init(cmdMsg_t *cmdMsg) {
     vce_vcmd_init(&cmdr52_mgr_get()->mtb[VCMD_MGR_ID_ENC]);
     vcd_vcmd_init(&cmdr52_mgr_get()->mtb[VCMD_MGR_ID_DEC]);
-	//ts_printf("%s:%s:%d started\n", __FILE__, __func__, __LINE__);
+//ts_printf("%s:%s:%d started\n", __FILE__, __func__, __LINE__);
     return cmdr52_start_mgr();
 }
 

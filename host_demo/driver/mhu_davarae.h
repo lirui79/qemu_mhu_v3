@@ -184,18 +184,12 @@ static inline void mhu_fifo_push32(uintptr_t pbx_base, unsigned ch, uint32_t val
 
 static inline uint32_t mhu_fifo_pop32(uintptr_t mbx_base, unsigned ch)
 {
-    /* 平台 MHU 模型(PAY 流式):读 MFFCW_PAY(RA_EN)弹出,必须再读一次
-     * MFFCW_FLG 推进 FIFO 读指针(参考 runtime_demo/driver/r52_gpu_drv.c
-     * r52_gpu_receive_words)。不能用 0x2028 FIFO_POP(模型不识别,返回
-     * 填充垃圾且不推进 → 数据错乱)。 */
-    uint32_t v = mhu_read32(mbx_base + MHU_MBX_FFCW_PAY(ch));
-    mhu_read32(mbx_base + MHU_MBX_FFCW_FLG(ch));
-    return v;
+    return mhu_read32(mbx_base + MHU_MBX_FFCW_PAY(ch));
 }
 
 static inline uint32_t mhu_fifo_rx_fill(uintptr_t mbx_base, unsigned ch)
 {
-    return mhu_read32(mbx_base + MHU_MBX_FFCW_ST(ch)) & 0xFFFFu;
+    return (mhu_read32(mbx_base + MHU_MBX_FFCW_ST(ch)) & 0x7FF);
 }
 
 static inline void mhu_fifo_clear_rx_irq(uintptr_t mbx_base, unsigned ch, uint32_t bits)

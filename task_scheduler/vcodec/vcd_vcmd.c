@@ -30,13 +30,6 @@
 #include "vcx_vcmd_dbg_log.h"
 #endif
 
-#ifdef  TIMEOUT_IRQ_TIMER
-#include "vcx_irq_timer.h"
-#endif
-
-#ifdef IRQ_SIMULATION
-#include "vcx_irq_simulation.h"
-#endif
 
 #ifdef SUPPORT_DBGFS
 #include "vcx_vcmd_dbgfs.h"
@@ -648,7 +641,7 @@ int vcd_vcmd_init(vcmd_mgr_t **_vcmd_mgr)
 	vcmd_mgr_t *vcmd_mgr;
 	struct hantrovcmd_dev *dev_ctx;
 
-	vcmd_mgr = vmalloc(sizeof(vcmd_mgr_t));
+	vcmd_mgr = ddr_alloc(sizeof(vcmd_mgr_t));
 	if (!vcmd_mgr)
 		return -1;
 	memset(vcmd_mgr, 0, sizeof(vcmd_mgr_t));
@@ -669,7 +662,7 @@ int vcd_vcmd_init(vcmd_mgr_t **_vcmd_mgr)
 	spin_lock_init(&vcmd_mgr->job_lock);
 	init_bi_list(&vcmd_mgr->job_done_list);
 
-	dev_ctx = vmalloc(sizeof(struct hantrovcmd_dev) * vcmd_mgr->subsys_num);
+	dev_ctx = ddr_alloc(sizeof(struct hantrovcmd_dev) * vcmd_mgr->subsys_num);
 	if (!dev_ctx)
 		goto err1;
 	memset(dev_ctx, 0, sizeof(struct hantrovcmd_dev) * vcmd_mgr->subsys_num);
@@ -712,7 +705,7 @@ int vcd_vcmd_init(vcmd_mgr_t **_vcmd_mgr)
 	vcmd_init_nodes(vcmd_mgr);
 
 	/* create vcmd kthread, which need to be woken up */
-	_vcmd_kthread_create(vcmd_mgr);
+//	_vcmd_kthread_create(vcmd_mgr);
 
 	/* read all registers of main-module for each dev
 	 * for analyzing configuration in cwl
@@ -720,20 +713,18 @@ int vcd_vcmd_init(vcmd_mgr_t **_vcmd_mgr)
 #ifdef VCMD_ALLOC_MEM
 	read_main_module_all_registers(vcmd_mgr);
 #endif
-	vcmd_klog(LOGLVL_CONFIG, "vcx_vcmd_driver: module inserted. Major <%d>\n",
-		vcmd_mgr->hantrovcmd_major);
 
 	*_vcmd_mgr = (vcmd_mgr_t *)vcmd_mgr;
-	ts_printf("%s:%s:%d started\n", __FILE__, __func__, __LINE__);
+	vcmd_klog(LOGLVL_CONFIG, "vcd_vcmd_init\n");
 	return 0;
 
 err:
 	vcmd_release_IO(vcmd_mgr);
 err1:
 	if (vcmd_mgr->dev_ctx)
-		vfree(vcmd_mgr->dev_ctx);
+		ddr_free(vcmd_mgr->dev_ctx);
 	if (vcmd_mgr)
-		vfree(vcmd_mgr);
+		ddr_free(vcmd_mgr);
 	vcmd_klog(LOGLVL_ERROR, "module not inserted!\n");
 	return result;
 }
@@ -746,7 +737,7 @@ void vcd_vcmd_exit(vcmd_mgr_t *vcmd_mgr)
 	int i = 0;
 	struct hantrovcmd_dev *dev_ctx = vcmd_mgr->dev_ctx;
 
-	_vcmd_kthread_stop(vcmd_mgr);
+//	_vcmd_kthread_stop(vcmd_mgr);
 
 	for (i = 0; i < vcmd_mgr->subsys_num; i++) {
 		if (!dev_ctx[i].hwregs)
@@ -758,16 +749,13 @@ void vcd_vcmd_exit(vcmd_mgr_t *vcmd_mgr)
 #ifdef SUPPORT_WATCHDOG
         _vcmd_watchdog_delete(&dev_ctx[i]);
 #endif
-		/* free the vcmd IRQ */
-		//if (dev_ctx[i].subsys_info->irq != -1)
-		//	free_irq(dev_ctx[i].subsys_info->irq, (void *)vcmd_mgr);
 	}
 
 #ifdef SUPPORT_DBGFS
 	_dbgfs_cleanup((void *)vcmd_mgr);
 #endif
 	vcmd_release_IO(vcmd_mgr);
-	vfree(dev_ctx);
+	ddr_free(dev_ctx);
 
 /*
 	//release_vcmd_non_cachable_memory();
@@ -781,7 +769,7 @@ void vcd_vcmd_exit(vcmd_mgr_t *vcmd_mgr)
 
     destroy_waitqueue_head(&vcmd_mgr->job_waitq);
 
-	vfree(vcmd_mgr);
+	ddr_free(vcmd_mgr);
 	vcmd_klog(LOGLVL_FLOW, "module removed\n");
 }
 

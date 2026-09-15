@@ -71,7 +71,7 @@ typedef struct {
     struct task_struct   *recv_thread[CMD_R52_MGR_MAX];
     struct task_struct   *work_thread;
 #endif
-	wait_queue_head_t     workwaitqueue;
+    wait_queue_head_t     workwaitqueue;
     atomic_t              refcount;
 } cmda78_mgr_t;
 

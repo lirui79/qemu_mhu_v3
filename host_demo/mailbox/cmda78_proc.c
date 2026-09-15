@@ -17,43 +17,54 @@
 #include "crc32.h"
 #include "vcx_vcmd.h"
 #include "cmda78_mgr.h"
+#include "mhu_davarae.h"
 #include "cmda78_proc.h"
-#include "mhu_v3_client.h"
 
 
+static void doorbell_irq_callback_t(uint32_t irq, uint32_t channel) {
+    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[(channel - 1) / 2]);
 
-int32_t cmda78_send(cmdMsg_t *cmdMsg) {
-    int32_t retCode = 0;
-    uint32_t r52ID = ((cmdMsg->sessionID & 0xFFFF0000) >> 16);
+    if (irq == 0) {
 
-    ts_printf("%s:%s:%d r52ID:%d started\n", __FILE__, __func__, __LINE__, r52ID);
+    } else {
 
-    cmdMsg->crc32 = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-// mailbox_send(cmdMsg);//    retCode = mhu_send_data((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-    retCode = mhu_v3_send_data(r52ID, (const uint8_t *)cmdMsg, cmdMsg->cmdSize);
-
-    return retCode;
+    }
+    ts_printf("doorbell_irq_callback_t\n");
 }
 
-int32_t    cmda78_thread_wakeup(uint32_t r52CoreID) {
-    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[r52CoreID]);
-    atomic_inc(&rmgr->refcount);
-    wake_up_interruptible(&rmgr->workwaitqueue);
-    return 0;
+static void fastchan_irq_callback_t(uint32_t irq, uint32_t channel) {
+    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[(channel - 1) / 2]);
+
+    if (irq == 0) {
+
+    } else {
+
+    }
+    ts_printf("fastchan_irq_callback_t\n");
 }
 
-/* ISR 安全版本:mhu_mbx_isr 的 FF 分支在中断上下文调用 irq_callback_fifo,
- * 非 FromISR 版本里 xSemaphoreTake(portMAX_DELAY) 会触发
- * portASSERT_IF_IN_ISR(port.c:176 assert)。 */
-int32_t    cmda78_thread_wakeup_from_isr(uint32_t r52CoreID, BaseType_t *pxHigherPriorityTaskWoken) {
-    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[r52CoreID]);
-    atomic_inc_from_isr(&rmgr->refcount);
-    wake_up_interruptible_from_isr(&rmgr->workwaitqueue, pxHigherPriorityTaskWoken);
-    return 0;
+static void fifochan_irq_callback_t(uint32_t irq, uint32_t channel) {
+    cmd_r52mgr_t *rmgr = &(cmda78_get_mgr()->rtb[(channel - 1) / 2]);
+
+    if (irq == 0) {
+        atomic_inc(&rmgr->refcount);
+        wake_up_interruptible(&rmgr->workwaitqueue);
+    } else {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        atomic_inc_from_isr(&rmgr->refcount);
+        wake_up_interruptible_from_isr(&rmgr->workwaitqueue, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+ 
+    ts_printf("fifochan_irq_callback_t %u %u\n", irq, channel);
 }
 
+void        cmda78_set_callback(void) {
+    mhu_set_irq_callback(0, doorbell_irq_callback_t);
+    mhu_set_irq_callback(1, fastchan_irq_callback_t);
+    mhu_set_irq_callback(2, fifochan_irq_callback_t);
+}
 
-#ifdef __FREERTOS__
 static void cmda78_work_thread_proc(void *arg) {
     cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
     cmdMsg_t *cmdMsg = NULL;
@@ -103,14 +114,14 @@ static void cmda78_recv_thread_func(void *arg) {
          * 也能周期性回到循环继续轮询;若响应到达,ISR/poll 会即时唤醒。 */
         retCode = wait_event_interruptible_timeout(rmgr->workwaitqueue,
                                                    (atomic_read(&rmgr->refcount) > 0)
-                                                   || (mhu_rx_data_fill(ch) > 0),
-                                                   pdMS_TO_TICKS(500));
+                                                   || (mhu_fifo_rx_fill(MHU_MBX_BASE, ch) >= CMD_MSG_MIN_SIZE),
+                                                   pdMS_TO_TICKS(200));
         if (retCode == pdFALSE) {
             continue;   /* 超时未就绪,回到循环顶部继续轮询 */
         }
 
         /* 仅有中断标志但 FIFO 空(例如 doorbell 通知),无需接收:清标志后跳过 */
-        if (mhu_rx_data_fill(ch) == 0) {
+        if (mhu_fifo_rx_fill(MHU_MBX_BASE, ch) < CMD_MSG_MIN_SIZE) {
             if (atomic_read(&rmgr->refcount) > 0)
                 atomic_dec(&rmgr->refcount);
             continue;
@@ -118,13 +129,13 @@ static void cmda78_recv_thread_func(void *arg) {
 
         cmdMsg = cmda78_dequeue_cmdMsg();
 // mailbox_recv(cmdMsg);//
-        code = mhu_v3_recv_data(rmgr->r52coreid, (uint8_t *)cmdMsg, &cmdMsg->cmdSize);
-        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
-        if (code != 0) {
+        code = mhu_recv_data(ch, (void *)cmdMsg, CMD_MSG_MAX_SIZE);//        ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
+        if (code <= 0) {
             cmda78_cancel_cmdMsg(cmdMsg);
             continue;
         }
-        atomic_dec(&rmgr->refcount);
+        if (atomic_read(&rmgr->refcount) > 0)
+            atomic_dec(&rmgr->refcount);
 
         cmda78_queue_cmdMsg(cmdMsg);
         atomic_inc(&mgr->refcount);
@@ -252,130 +263,3 @@ int32_t  cmda78_thread_stop(void* arg) {
 
     return 0;
 }
-
-#else
-static int32_t cmda78_work_thread_proc(void *arg) {
-    cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
-    cmdMsg_t *cmdMsg = NULL;
-
-    ts_printf("work thread started\n");
-    while (!kthread_should_stop()) {
-        if (wait_event_interruptible(mgr->workwaitqueue, atomic_read(&mgr->refcount) > 0)) {
-            ts_printf("cmd work: %s: signaled!!!\n", __func__);
-            break;
-        }
-
-        cmdMsg = cmda78_acquire_cmdMsg();
-        if (cmdMsg == NULL) {
-            continue;
-        }
-        cmda78_proc_cmdMsg(cmdMsg);
-        cmda78_release_cmdMsg(cmdMsg);
-        atomic_dec(&mgr->refcount);
-    }
-    return 0;
-}
-
-/*
-uint32_t crc32_calc(const uint8_t *buffer, size_t bufferLength) {
-// 使用内核 API 计算 CRC32
-// 种子值使用 ~0，与 R52 侧保持一致
-   return crc32_le(~0, buffer, bufferLength) ^ ~0;
-}*/
-
-
-static int cmda78_thread_func(void *arg) {
-    cmd_r52mgr_t *rmgr = (cmd_r52mgr_t *)arg;
-    cmda78_mgr_t *mgr = (cmda78_mgr_t*) cmda78_get_mgr();
-    cmdMsg_t *cmdMsg = NULL;
-    int32_t code = 0;
-
-    ts_printf("%s:%s:%d started\n", __FILE__, __func__, __LINE__);
-
-    while (!kthread_should_stop()) {
-        if (wait_event_interruptible(rmgr->workwaitqueue, atomic_read(&rmgr->refcount) > 0)) {
-            ts_printf("cmd work: %s: signaled!!!\n", __func__);
-            break;
-        }
-
-        cmdMsg = cmda78_dequeue_cmdMsg();
-// mailbox_recv(cmdMsg);//
-        code = mhu_v3_recv_data(rmgr->r52coreid, (uint8_t *)cmdMsg);
-        ts_printf("%s:%s:%d recv\n", __FILE__, __func__, __LINE__);
-        if (code != 0) {
-            cmda78_cancel_cmdMsg(cmdMsg);
-            continue;
-        }
-        cmda78_queue_cmdMsg(cmdMsg);
-        atomic_inc(&mgr->refcount);
-        wake_up_interruptible(&mgr->workwaitqueue);
-    }
-
-    ts_printf("recv thread exiting\n");
-    return 0;
-}
-
-int32_t  cmda78_thread_create(void* arg) {
-    cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
-    cmd_r52mgr_t *rmgr = &mgr->rtb[0];
-    atomic_set(&mgr->refcount, 0);
-    init_waitqueue_head(&mgr->workwaitqueue);
-    atomic_set(&rmgr->refcount, 0);
-    init_waitqueue_head(&rmgr->workwaitqueue);
-    rmgr = &mgr->rtb[1];
-    atomic_set(&rmgr->refcount, 0);
-    init_waitqueue_head(&rmgr->workwaitqueue);
-    // 创建并启动内核线程，将 dev 作为参数传入
-    mgr->recv_thread[0] = kthread_run(cmda78_thread_func, &mgr->rtb[0], "recv_thread0");
-    if (IS_ERR(mgr->recv_thread[0])) {
-        ts_printf("Failed to create recv thread 0\n");
-        return PTR_ERR(mgr->recv_thread[0]);
-    }
-
-    mgr->recv_thread[1] = kthread_run(cmda78_thread_func, &mgr->rtb[1], "recv_thread1");
-    if (IS_ERR(mgr->recv_thread[1])) {
-        ts_printf("Failed to create recv thread 1\n");
-        kthread_stop(mgr->recv_thread[0]);
-        mgr->recv_thread[0] = NULL;
-        return PTR_ERR(mgr->recv_thread[1]);
-    }
-
-    mgr->work_thread = kthread_run(cmda78_work_thread_proc, mgr, "work_thread");
-    if (IS_ERR(mgr->work_thread)) {
-        ts_printf("Failed to create work thread\n");
-        kthread_stop(mgr->recv_thread[1]);
-        mgr->recv_thread[1] = NULL;
-        kthread_stop(mgr->recv_thread[0]);
-        mgr->recv_thread[0] = NULL;
-        return PTR_ERR(mgr->work_thread);
-    }
-
-    return 0;
-}
-
-int32_t  cmda78_thread_stop(void* arg) {
-    cmda78_mgr_t *mgr = (cmda78_mgr_t*) arg;
-
-    if (mgr->work_thread) {
-        // 请求停止并等待线程退出
-        kthread_stop(mgr->work_thread);
-        mgr->work_thread = NULL;
-    }
-
-    if (mgr->recv_thread[1]) {
-        // 请求停止并等待线程退出
-        kthread_stop(mgr->recv_thread[1]);
-        mgr->recv_thread[1] = NULL;
-    }
-
-    if (mgr->recv_thread[0]) {
-        // 请求停止并等待线程退出
-        kthread_stop(mgr->recv_thread[0]);
-        mgr->recv_thread[0] = NULL;
-    }
-
-    return 0;
-}
-
-
-#endif

@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+/* ------------------------------------------------------------------ */
+/* Register map                                                       */
+/* ------------------------------------------------------------------ */
+
 typedef volatile struct __attribute__((packed)) {
     uint32_t DR;               /* 0x0 Data Register */
     uint32_t RSRECR;           /* 0x4 Receive status / error clear register */
@@ -14,7 +18,7 @@ typedef volatile struct __attribute__((packed)) {
     uint32_t FBRD;             /* 0x28 Fractional baudrate register */
     uint32_t LCRH;             /* 0x2C Line control register */
     uint32_t CR;               /* 0x30 Control register */
-} uart_registers;
+} uart_registers_t;
 
 #define DR_DATA_MASK        (0xFFu)
 
@@ -35,5 +39,55 @@ typedef volatile struct __attribute__((packed)) {
 #define LCRH_WLEN_6BITS     (1u << 5u)
 #define LCRH_WLEN_7BITS     (2u << 5u)
 #define LCRH_WLEN_8BITS     (3u << 5u)
+
+/* ------------------------------------------------------------------ */
+/* Config values                                                      */
+/* ------------------------------------------------------------------ */
+
+/* uart configuration */
+typedef struct {
+    uint8_t     data_bits;      /* data word length: 5, 6, 7 or 8 */
+    uint8_t     stop_bits;      /* stop bits: 1 or 2 */
+    uint8_t     parity;         /* 0 = none, non-zero = even parity */
+    uint32_t    baudrate;       /* baudrate, range [110, 460800] */
+} uart_config_t;
+
+/* ------------------------------------------------------------------ */
+/* API                                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @brief  Configure a UART controller, applied to the UART after disabling it
+ *         and flushing the FIFO; call with all fields of config filled in
+ * @param  uart_base: base address of the UART controller
+ * @param  config: UART configuration (data bits, stop bits, parity, baudrate)
+ * @return TS_OK for success, TS_ERR_INVALID_ARG for out-of-range values
+ */
+int uart_configure(uint32_t uart_base, uart_config_t* config);
+
+/**
+ * @brief  Transmit a single character, blocks until the transmit FIFO has room
+ * @param  uart_base: base address of the UART controller
+ * @param  c: character to transmit
+ * @return None
+ */
+void uart_putchar(uint32_t uart_base, char c);
+
+/**
+ * @brief  Transmit a null-terminated string
+ * @param  uart_base: base address of the UART controller
+ * @param  data: pointer to the string to transmit
+ * @return None
+ */
+void uart_write(uint32_t uart_base, const char* data);
+
+/**
+ * @brief  Receive a character without blocking
+ * @param  uart_base: base address of the UART controller
+ * @param  c: pointer to memory to save the received character
+ * @return TS_OK for success, TS_ERR_EMPTY if the receive FIFO is empty,
+ *         TS_ERR_IO if the character was received with an error
+ */
+int uart_getchar(uint32_t uart_base, char* c);
 
 #endif

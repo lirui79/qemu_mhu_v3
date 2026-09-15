@@ -68,25 +68,6 @@ void init_bi_list(bi_list *list)
 	list->tail = NULL;
 }
 
-bi_list_node *bi_list_create_node(void)
-{
-	bi_list_node *node = NULL;
-
-	node = vmalloc(sizeof(bi_list_node));
-	if (!node) {
-		ts_printf("%s\n", "vmalloc for node fail!");
-		return node;
-	}
-	memset(node, 0, sizeof(bi_list_node));
-	return node;
-}
-
-void bi_list_free_node(bi_list_node *node)
-{
-	//free current node
-	vfree(node);
-}
-
 void bi_list_insert_node_tail(bi_list *list, bi_list_node *current_node)
 {
 	if (!current_node)

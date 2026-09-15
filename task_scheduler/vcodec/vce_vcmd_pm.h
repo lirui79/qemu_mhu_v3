@@ -17,7 +17,7 @@
 #ifndef _VCE_VCMD_PM_H_
 #define _VCE_VCMD_PM_H_
 
-#define CONFIG_ENC_PM
+//#define CONFIG_ENC_PM
 
 #ifdef __cplusplus
 extern "C" {

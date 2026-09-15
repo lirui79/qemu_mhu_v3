@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include "host.h"
 #include "system.h"
 #include "gicv3_basic.h"
 #include "mhu_davarae.h"
@@ -8,26 +9,11 @@
 #include "vcodec.h"
 #include "cmdr52_proc.h"
 
-
 static volatile int g_core0_started = 0;
 static volatile int g_core1_started = 0;
 
 /* per-core FreeRTOS scheduler running flag (declared extern in system.h) */
 volatile uint8_t g_scheduler_started[2] = {0, 0};
-
-/**
- * command processor 作为 core0 的 FreeRTOS 任务运行。
- * command_processor() 本身是事件驱动的无限循环(WFI + MHU 标志轮询),
- * 作为任务运行时,MHU 组合中断会唤醒 WFI 并更新标志,中断返回后
- * 任务继续检查标志并处理命令,与裸机行为一致。
- */
-static void command_task(void *arg)
-{
-    (void)arg;
-    command_processor();
-    /* command_processor() 永不返回 */
-    vTaskDelete(NULL);
-}
 
 /*
  * Task 1 - Periodic status output
@@ -66,23 +52,17 @@ static void interrupt_init(void)
     uint32_t af = get_cpu_id();
     uint32_t rd;
 
-    // Set location of GIC
-    setGICAddr((void*)GICD_BASE, (void*)GICR_BASE);
+    if (af == 0) {
+        // Set location of GIC
+        setGICAddr((void*)GICD_BASE, (void*)GICR_BASE);
 
-    // Enable GIC
-    enableGIC();
+        // Enable GIC
+        enableGIC();
+    }
 
     // Get the ID of the Redistributor connected to this PE
     rd = getRedistID(af);
-    if (0xFFFFFFFF == rd)
-    {
-        /* 防御:本平台 RD index == CPU ID。VP 的 GICR_TYPER 读取异常时
-         * (见 run.sh 中 gdb_port remote_argv 的说明)兜底到 CPU ID,
-         * 避免提前 return 跳过 CPU interface 配置(即使 startup.S 已
-         * 配置 ICC_SRE/ICC_PMR/ICC_IGRPEN1,这里保持一致)。 */
-        rd = af;
-        ts_printf("Warning: invalid redistributor, fallback to cpu id %u\n", af);
-    }
+    ts_assert(0xFFFFFFFF != rd);
 
     // Mark this core as being active
     wakeUpRedist(rd);
@@ -100,37 +80,13 @@ static void interrupt_init(void)
 static void peripheral_init(void)
 {
     /* uart initialization */
-    uart_config uart_cfg = {8, 1, 0, 115200};
+    uart_config_t uart_cfg = {8, 1, 0, 115200};
     uart_configure(UART0_BASE, &uart_cfg);
     uart_configure(UART1_BASE, &uart_cfg);
 
     /* mhu initialization */
     mhu_init();
 }
-
-static  void irq_callback_fifo(uint32_t irq, uint32_t channel) {
-//    ts_printf("[IRQ] FIFO %u\r\n", channel);
-    uint32_t r52CoreID = 0;
-    if (irq == 0) {
-        for (r52CoreID = 0; r52CoreID < 2; r52CoreID++) {
-            if (channel & (1ul << (2 * r52CoreID))) {
-                cmdr52_thread_wakeup(r52CoreID);
-            }
-        }
-    } else {
-        /* A76→R52 命令走 fast/fifo channel 2*id(core0→ch0, core1→ch2),
-        * FIFO 接收中断位图对应 bit(ch)=bit(2*id),必须查 2*id 而非 2*id+1
-        * (2*id+1 是 R52→A76 的反向通道,查它 core0 永远收不到唤醒)。 */
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        for (r52CoreID = 0; r52CoreID < 2; r52CoreID++) {
-            if (channel & (1ul << (2 * r52CoreID))) {
-                cmdr52_thread_wakeup_from_isr(r52CoreID, &xHigherPriorityTaskWoken);
-            }
-        }
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    }
-}
-
 
 /**
  * core 0 entry
@@ -151,6 +107,8 @@ int main(void)
     interrupt_init();
     peripheral_init();
 
+    vcodecr52_init();
+    cmdr52_set_callback();
     ts_printf("R52 core 0 startup\n");
 
     /* enable caches */
@@ -162,38 +120,24 @@ int main(void)
      * FreeRTOS_Tick_Handler()->xTaskIncrementTick(),调度器已启动,安全。 */
 
     /* enable IRQ and FIQ in SVC mode */
+          /* enable arch timer */
+    arch_timer_init(SYSTEM_TICK_MS_0);
+    
     __asm volatile ("CPSIE if");
 
     g_core0_started = 1;
     while (!g_core1_started) {
     }
 
-    /* run self test */
-    self_test();
-
     /* signal startup event to host CPU */
-    mhu_send_event(0, MHU_DB0_EVENT_TS_STARTUP);
+    mhu_send_event(0, TS_EVENT_STARTUP);
 
     /* wait until host CPU has initialized its side of the MHU */
     ts_printf("Wait host startup doorbell\n");
-    mhu_wait_event(0, MHU_DB0_EVENT_HOST_STARTUP);
+    mhu_wait_event(0, HOST_EVENT_STARTUP);
     ts_printf("Host startup doorbell received\n");
 
-    /* create command processor as a FreeRTOS task, then start the scheduler.
-     * vTaskStartScheduler() configures the tick (PPI30) and never returns.
-     * Mark this core as scheduler-running *before* starting so the IRQ
-     * handler routes PPI30 to FreeRTOS_Tick_Handler() correctly. */
-/*
-    if (pdPASS != xTaskCreate(command_task, "command",
-                              configMINIMAL_STACK_SIZE, NULL,
-                              tskIDLE_PRIORITY + 1, NULL))
-    {
-        ts_printf("[ERROR] Failed to create command task\r\n");
-        for (;;) {
-            __asm__ volatile("wfi");
-        }
-    }
-*/
+
     /* Create demo tasks */
 /*
     xResult = xTaskCreate(
@@ -224,10 +168,7 @@ int main(void)
 
 
 //*
-    mhu_set_irq_callback(2, irq_callback_fifo);
-
     g_scheduler_started[0] = 1;
-    vcodecr52_init();//*/
 
     /* Start the scheduler - never returns */
     vTaskStartScheduler();
@@ -288,6 +229,9 @@ int main_core1(void)
 
     /* enable the caches */
     enable_caches();
+
+    /* enable arch timer */
+    arch_timer_init(SYSTEM_TICK_MS_1);
 
     /* enable IRQ and FIQ in SVC mode */
     __asm volatile ("CPSIE if");

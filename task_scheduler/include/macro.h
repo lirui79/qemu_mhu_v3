@@ -31,9 +31,24 @@
     __val;                   \
 })
 
+#define BIT(n)                      (1UL << (n))
+#define SET_BIT(reg, mask)          ((reg) |= (mask))
+#define CLEAR_BIT(reg, mask)        ((reg) &= ~(mask))
+
 #define SET_BIT32(addr, mask)       (REG32(addr) |= (uint32_t)(mask))
 #define CLEAR_BIT32(addr, mask)     (REG32(addr) &= ~(uint32_t)(mask))
 #define TOGGLE_BIT32(addr, mask)    (REG32(addr) ^= (uint32_t)(mask))
 #define READ_BITS32(addr, mask)     (REG32(addr) & (uint32_t)(mask))
+
+#define ALIGN_UP(x, a)              (((x) + ((a) - 1)) & ~((a) - 1))
+#define ALIGN_DOWN(x, a)            ((x) & ~((a) - 1))
+#define IS_ALIGNED(x, a)            (((x) & ((a) - 1)) == 0)
+#define CEIL_DIV(x, y)              (((x) + (y) - 1) / (y))
+#define FLOOR_DIV(n, d)             ((n) / (d))
+
+#define MAX(a, b)                   (((a) > (b)) ? (a) : (b))
+#define MIN(a, b)                   (((a) < (b)) ? (a) : (b))
+#define CLAMP(x, min, max)          (MIN(MAX((x), (min)), (max)))
+#define ABS(x)                      (((x) < 0) ? -(x) : (x))
 
 #endif
