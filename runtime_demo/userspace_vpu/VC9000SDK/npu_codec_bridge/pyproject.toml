@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "npu_codec_bridge"
+version = "0.1.0"
+description = "NPU hardware video decoder bridge for torchcodec — VastAI NPU support"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "torchcodec>=0.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["npu_codec_bridge*"]

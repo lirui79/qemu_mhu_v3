@@ -1,0 +1,9 @@
+{
+	"params": [
+		{
+			"roiType": 2,
+			"roiInt": 1,
+			"roiMapDeltaQpBlockUnit": 1
+		}
+	]
+}

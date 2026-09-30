@@ -37,7 +37,7 @@ void irq_handler(uint32_t ulInterruptID) {
         }
         case IRQ_ID_MHU_MBX_COMB: {
             mhu_mbx_isr();
-            ts_info("CPU:%u IRQ:%u\n", ulCpuID, ulInterruptID);
+            ts_dbg("CPU:%u IRQ:%u\n", ulCpuID, ulInterruptID);
             break;
         }
         default: {
@@ -63,7 +63,7 @@ void interrupt_enable(int irq, INT_PRIORITY priority)
      * 会因 rd > gic_max_rd 静默跳过,IRQ 永远收不到。 */
     if (0xFFFFFFFF == rd) {
         rd = af;
-        ts_printf("Warning: redistributor lookup fallback to cpu id %u\n", af);
+        ts_warn("Warning: redistributor lookup fallback to cpu id %u\n", af);
     }
     setIntPriority(irq, rd, priority);
     setIntGroup(irq, rd, GICV3_GROUP1_NON_SECURE);

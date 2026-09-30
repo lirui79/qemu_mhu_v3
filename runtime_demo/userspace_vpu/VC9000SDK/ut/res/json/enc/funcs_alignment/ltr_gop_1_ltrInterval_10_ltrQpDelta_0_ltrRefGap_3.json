@@ -1,0 +1,10 @@
+{
+	"params": [
+		{
+			"gopSize": 1,
+			"ltrInterval": 10,
+			"ltrQpDelta": 0,
+			"ltrRefGap": 3
+		}
+	]
+}

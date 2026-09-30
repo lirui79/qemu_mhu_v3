@@ -1,0 +1,8 @@
+	build/*
+	debug/
+	lib/
+	sample/build/
+	src/dec/lib/.depend
+	src/dec/lib/bin/
+	src/dec/lib/out/
+	src/enc/lib/bin/

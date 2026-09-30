@@ -43,7 +43,7 @@ VP 将 `linux_payload.bin` 加载到 `0x80100000`：
 | `0x80100000` | boot shim |
 | `0x80110000` | DTB |
 | `0x80200000` | arm64 Linux `Image` |
-| `0x84100000` | initramfs，最大 16 MB |
+| `0x84100000` | initramfs，最大 128 MB（`INITRAMFS_LIMIT`） |
 | `0x90000000` | Linux/R52 non-cacheable IPC，1 MB |
 
 boot shim 按 arm64 boot protocol 设置 `x0=DTB`，然后进入 Linux `Image`。

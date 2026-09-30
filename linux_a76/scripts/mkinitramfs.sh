@@ -21,11 +21,27 @@ BIN_DIR="${RPATH}/linux_a76/bins"
 BS_DIR="${RPATH}/runtime_demo/userspace_vpu/VC9000D/data"
 TBCFG="${RPATH}/runtime_demo/userspace_vpu/VC9000D/binary_0x1ff0/tb.cfg"
 YUV_DIR="${RPATH}/runtime_demo/userspace_vpu/VC9000E/data"
+JPEG_DIR="${RPATH}/runtime_demo/userspace_vpu/VC9000SDK/sample/resource"
 
 echo "BIN_DIR=${BIN_DIR}"
 echo "BS_DIR=${BS_DIR}"
 echo "TBCFG=${TBCFG}"
 echo "YUV_DIR=${YUV_DIR}"
+
+
+VMPP_JDEC_LAUNCHER="${BIN_DIR}/jpeg_dec"
+VMPP_JDEC_MT_LAUNCHER="${BIN_DIR}/jpeg_dec_mt"
+VMPP_JENC_LAUNCHER="${BIN_DIR}/jpeg_enc"
+VMPP_JENC_MT_LAUNCHER="${BIN_DIR}/jpeg_enc_mt"
+
+VMPP_TRANSCODE_LAUNCHER="${BIN_DIR}/transcode"
+VMPP_TRANSCODE_MT_LAUNCHER="${BIN_DIR}/transcode_mt"
+
+VMPP_VDEC_LAUNCHER="${BIN_DIR}/video_dec"
+VMPP_VDEC_MT_LAUNCHER="${BIN_DIR}/video_dec_mt"
+VMPP_VENC_LAUNCHER="${BIN_DIR}/video_enc"
+VMPP_VENC_MT_LAUNCHER="${BIN_DIR}/video_enc_mt"
+
 
 H264_LAUNCHER="${BIN_DIR}/h264_testenc"
 HEVC_LAUNCHER="${BIN_DIR}/hevc_testenc"
@@ -65,6 +81,19 @@ fi
 install -D -m 0755 "${launcher}" "${root}/bin/launch_kernel"
 install -D -m 0644 "${module}" "${root}/lib/modules/r52_gpu.ko"
 
+install -D -m 0755 "${VMPP_JDEC_LAUNCHER}" "${root}/bin/jpeg_dec"
+install -D -m 0755 "${VMPP_JDEC_MT_LAUNCHER}" "${root}/bin/jpeg_dec_mt"
+install -D -m 0755 "${VMPP_JENC_LAUNCHER}" "${root}/bin/jpeg_enc"
+install -D -m 0755 "${VMPP_JENC_MT_LAUNCHER}" "${root}/bin/jpeg_enc_mt"
+
+install -D -m 0755 "${VMPP_TRANSCODE_LAUNCHER}" "${root}/bin/transcode"
+install -D -m 0755 "${VMPP_TRANSCODE_MT_LAUNCHER}" "${root}/bin/transcode_mt"
+
+install -D -m 0755 "${VMPP_VDEC_LAUNCHER}" "${root}/bin/video_dec"
+install -D -m 0755 "${VMPP_VDEC_MT_LAUNCHER}" "${root}/bin/video_dec_mt"
+install -D -m 0755 "${VMPP_VENC_LAUNCHER}" "${root}/bin/video_enc"
+install -D -m 0755 "${VMPP_VENC_MT_LAUNCHER}" "${root}/bin/video_enc_mt"
+
 install -D -m 0755 "${H264_LAUNCHER}" "${root}/bin/h264_testenc"
 install -D -m 0755 "${HEVC_LAUNCHER}" "${root}/bin/hevc_testenc"
 install -D -m 0755 "${DEC_LAUNCHER}" "${root}/bin/g2dec"
@@ -82,6 +111,7 @@ chmod 0666 "${root}/bin/tb.cfg"
 cp  "${BS_DIR}/akiyo_352x288_300_IBBBP.h264" "${root}/home/"
 cp  "${BS_DIR}/sample_640x360.hevc" "${root}/home/"
 cp  "${YUV_DIR}/akiyo_352x288_10.yuv" "${root}/home/"
+cp  "${JPEG_DIR}/stream1.jpg" "${root}/home/"
 chmod 0666 "${root}/home/akiyo_352x288_300_IBBBP.h264"
 chmod 0666 "${root}/home/sample_640x360.hevc"
 chmod 0666 "${root}/home/akiyo_352x288_10.yuv"

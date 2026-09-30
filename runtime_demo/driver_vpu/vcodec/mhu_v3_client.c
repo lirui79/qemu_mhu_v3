@@ -442,6 +442,7 @@ int mhu_v3_client_probe(struct platform_device *pdev) {
     int ret, i = 0;
     vcx_priv->priv = (void*)mgr;
     mgr->dev = &pdev->dev;
+#ifdef MAILBOX_CLIENT
     mhu_pdev = mhu_v3_find_platform_device(dev);
     if (!mhu_pdev) {
         pr_err("MHU V3: Failed to find platform device for MHU\n");
@@ -502,6 +503,7 @@ int mhu_v3_client_probe(struct platform_device *pdev) {
 
 //	printk("%s %s %d:\n", __FILE__, __func__, __LINE__);
     ret = mhu_init(pdev, mgr);
+#endif
     printk("MHU V3 Client probed %d successfully\n", ret);
     return ret;
 }

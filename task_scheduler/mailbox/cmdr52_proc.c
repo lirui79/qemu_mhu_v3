@@ -32,7 +32,8 @@ static void doorbell_irq_callback_t(uint32_t irq, uint32_t channel) {
     } else {
 
     }
-    ts_printf("doorbell_irq_callback_t\n");
+//ts_info
+    ts_dbg("doorbell_irq_callback_t\n");
 }
 
 static void fastchan_irq_callback_t(uint32_t irq, uint32_t channel) {
@@ -43,7 +44,8 @@ static void fastchan_irq_callback_t(uint32_t irq, uint32_t channel) {
     } else {
 
     }
-    ts_printf("fastchan_irq_callback_t\n");
+//ts_info
+    ts_dbg("fastchan_irq_callback_t\n");
 }
 
 /* MHU FIFO 事件去重位图:bit n 表示 channel n 已有一条 CMD_EVT_INTIRQ_MHU
@@ -87,7 +89,7 @@ static void fifochan_irq_callback_t(uint32_t irq, uint32_t channel) {
     }
     if (cmdMsg == NULL) {
         /* free 池耗尽:回滚占位,避免该 channel 的事件永久丢失 */
-        ts_printf("fifochan: no free cmdMsg ch=%u\n", channel);
+        ts_err("fifochan: no free cmdMsg ch=%u\n", channel);
         fifochan_evt_consumed(channel);
         return;
     }
@@ -100,15 +102,14 @@ static void fifochan_irq_callback_t(uint32_t irq, uint32_t channel) {
     cmdMsg->seqNum    = 0x00;
     cmdBody->inttype  = 0x02;
     cmdBody->channel  = channel;
-//    ts_printf("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
-        (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
-        cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32);
+
     if (irq == 0) {
         BQueueQueue(mgr->cmd_queue, cmdMsg);    
     } else {
         BQueueQueueFromISR(mgr->cmd_queue, cmdMsg);
     }
-    ts_printf("fifochan_irq_callback_t %u %u\n", irq, channel);
+//ts_info
+    ts_dbg("fifochan_irq_callback_t %u %u\n", irq, channel);
 }
 
 void        cmdr52_set_callback(void) {
@@ -127,14 +128,12 @@ static int32_t  cmdr52_mgr_recv_cmdMsg(cmdMsg_t *cmdIMsg) {
     fifochan_evt_consumed(channel);
     cmdMsg = cmdr52_mgr_dequeue_cmdMsg();
     if (cmdMsg == NULL) {
-        ts_printf("failed to alloc recv buf, channel %u\n", channel);
+        ts_err("failed to alloc recv buf, channel %u\n", channel);
         return -1;
-    }
-    // mailbox_recv(cmdMsg);
-//    ts_printf("%s:%s:%d\n", __FILE__, __func__, __LINE__);
+    }//    ts_printf("%s:%s:%d\n", __FILE__, __func__, __LINE__);
     rvsz = mhu_recv_data(channel, cmdMsg, CMD_MSG_MAX_SIZE);
     if (rvsz <= 0) {
-        ts_printf("failed %u to receive, ret %d\n", channel, rvsz);
+        ts_err("failed %u to receive, ret %d\n", channel, rvsz);
         cmdr52_mgr_cancel_cmdMsg(cmdMsg);
         return -1;
     }
@@ -178,19 +177,20 @@ static int32_t cmdr52_mgr_proc_internal_cmdMsg(cmdMsg_t *cmdMsg) {
         retCode = cmdr52_mgr_recv_cmdMsg(cmdMsg);
         /* 事件消息本身用完即回收:否则每来一次 FIFO 事件就泄漏一个缓冲区,
          * 最终耗尽 1024 个 free 池,回调/recv 会拿到 NULL */
-        cmdr52_mgr_release_cmdMsg(cmdMsg);
         break;
     case CMD_EVT_INTIRQ_TIMER:
-        cmdr52_mgr_release_cmdMsg(cmdMsg);
         break;
     case CMD_EVT_INTIRQ_VCODEC:
         retCode = cmdr52_mgr_vpu_cmdMsg(cmdMsg);
-        cmdr52_mgr_release_cmdMsg(cmdMsg);
         break;
     default:
-        cmdr52_mgr_release_cmdMsg(cmdMsg);
         break;
     }
+//ts_info
+    ts_dbg("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
+        (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
+        cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32);
+    cmdr52_mgr_release_cmdMsg(cmdMsg);
     return retCode;
 }
 
@@ -229,9 +229,6 @@ void        cmdr52_proc_loop(void) {
             continue;
         }
 
-        ts_printf("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc=%x\n", \
-            (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
-            cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32);
         if ((cmdMsg->cmdType >= CMD_INTIRQ_MIN) &&
             (cmdMsg->cmdType <= CMD_INTIRQ_MAX)) {
             code = cmdr52_mgr_proc_internal_cmdMsg(cmdMsg);
@@ -240,9 +237,7 @@ void        cmdr52_proc_loop(void) {
         }
 
         if (code != CMD_ERR_SUCCESS) {
-            ts_printf("cmdr52_mgr_proc_cmdMsg:%d\n", code);
+            ts_err("cmdr52_mgr_proc_cmdMsg:%d\n", code);
         }
-        //ts_printf("%s:%s:%d %d\n", __FILE__, __func__, __LINE__, code);
-        //cmdr52_mgr_release_cmdMsg(cmdMsg);
     }
 }

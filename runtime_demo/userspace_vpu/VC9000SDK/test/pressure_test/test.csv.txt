@@ -1,0 +1,4 @@
+regression,Chimeinv12_2048x1152_29.970.yuv,video,2048,1152,nv12,29.970,300
+regression,vidyo1_1280x720_5M_nv12.yuv,video,1280,720,nv12,30,8640
+regression,output-720x1520-20200408-034950-448-hpjy-haidao.yuv,video,720,1520,yuv420p,29.970,448
+regression,vidyo1_1280x720_60.yuv,video,1280,720,yuv420p,29.970,600

@@ -1,0 +1,6 @@
+PROJECT(venc_sample)
+add_subdirectory(jpeg_enc)
+add_subdirectory(video_enc)
+add_subdirectory(jpeg_enc_multi_thread)
+add_subdirectory(video_enc_multi_thread)
+message("sample enc")

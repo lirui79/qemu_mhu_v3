@@ -47,7 +47,56 @@ DEC_LAUNCHER := $(BIN_DIR)/g2dec
 VPU_MODULE := $(VPU_DRIVER_DIR)/vcodec.ko
 MEM_MODULE := $(MEM_DRIVER_DIR)/memalloc.ko
 
-.PHONY: all tools kernel-config kernel-image driver initramfs payload clean help
+# VC9000SDK(vmpp)：直接调用 userspace_vpu/VC9000SDK/autobuild.sh
+VPU_SDK_DIR := $(HOST_LINUX_DRIVER)/userspace_vpu/VC9000SDK
+VPU_SDK_AUTOBUILD := $(VPU_SDK_DIR)/autobuild.sh
+# 安装到 bins/vmpp，可直接作为 INITRAMFS_OVERLAY 打包进 guest
+VPU_SDK_OUT ?= $(BIN_DIR)
+# -t: 0:dec+enc  1:dec  2:enc
+SDK_TARGET ?= 0
+# -r: 0:debug  1:release
+SDK_RELEASE ?= 0
+# -s: 0:off  1:ASan  2:TSan
+SDK_SANITIZER ?= 0
+# -d: dynamic resolution
+SDK_DYNRES ?= 0
+# -a: 本 Makefile 面向 arm64 guest，默认 1
+SDK_ARM64 ?= 1
+# -U: unit test
+SDK_UT ?= 0
+# -F: rebuild ffmpeg for samples
+SDK_REBUILD_FFMPEG ?= 0
+# -S: 1 产出自包含 libvmpp-*.a，且 sample 静态链接
+SDK_STATIC ?= 1
+
+SDK_FLAGS := -t $(SDK_TARGET) -r $(SDK_RELEASE) -s $(SDK_SANITIZER) \
+             -d $(SDK_DYNRES) -a $(SDK_ARM64) -U $(SDK_UT) \
+             -F $(SDK_REBUILD_FFMPEG) -S $(SDK_STATIC)
+
+# autobuild.sh 失败时是裸 exit（退出码可能为 0），故在 make 层复核产物
+ifeq ($(strip $(SDK_TARGET)),1)
+SDK_EXPECT_LIBS := libvmpp-dec.so
+else ifeq ($(strip $(SDK_TARGET)),2)
+SDK_EXPECT_LIBS := libvmpp-enc.so
+else
+SDK_EXPECT_LIBS := libvmpp-dec.so libvmpp-enc.so
+endif
+ifeq ($(strip $(SDK_STATIC)),1)
+SDK_EXPECT_LIBS += $(SDK_EXPECT_LIBS:.so=.a)
+endif
+
+# SDK_ARM64=1 时导出交叉编译器给 autobuild.sh 里的 cmake / 子 Makefile
+# SDK 的 cmake 同时 enable C 和 CXX，所以 g++ 也必须存在
+SDK_CC ?= $(CROSS_COMPILE)gcc
+SDK_CXX ?= $(CROSS_COMPILE)g++
+ifeq ($(strip $(SDK_ARM64)),1)
+SDK_ENV := CC=$(SDK_CC) CXX=$(SDK_CXX)
+else
+SDK_ENV := env -u CC -u CXX
+endif
+
+.PHONY: all tools kernel-config kernel-image driver initramfs payload \
+	vpu_sdk vpu_sdk_clean clean help
 
 all: payload
 
@@ -55,9 +104,11 @@ help:
 	@echo "Build host-independent pieces: make tools"
 	@echo "Configure kernel:              make KERNEL_SRC=/path/to/linux kernel-config"
 	@echo "Build complete payload:        make KERNEL_SRC=/path/to/linux all"
+	@echo "Build VC9000SDK(vmpp) only:    make vpu_sdk [SDK_TARGET=0|1|2] [SDK_STATIC=1]"
+	@echo "Build SDK and bake into guest: make vpu_sdk payload INITRAMFS_OVERLAY=$(VPU_SDK_OUT)"
 	@echo "Run after R52 build:           ../simulation/run_linux.sh"
 
-tools: $(BOOT_BIN) $(DTB) $(INIT) $(LAUNCHER) $(H264_LAUNCHER) $(HEVC_LAUNCHER) $(DEC_LAUNCHER)
+tools: $(BOOT_BIN) $(DTB) $(INIT) $(LAUNCHER) $(H264_LAUNCHER) $(HEVC_LAUNCHER) $(DEC_LAUNCHER) vpu_sdk
 
 $(BOOT_BUILD)/boot.o: boot/boot.S | $(BOOT_BUILD)
 	$(CC) -c -march=armv8-a -ffreestanding -nostdlib $< -o $@
@@ -111,7 +162,35 @@ $(DEC_LAUNCHER): | $(BIN_DIR)
 		else \
 			echo ">>> dynamic link mode"; \
 		    cp -rf $(DEC_USERSPACE_DIR)/build/$(DEC_ENV)/debug/*.so $(BIN_DIR); \
-		fi
+		    fi
+
+# ---------------- NEW: VC9000SDK(vmpp) 顶层目标 ----------------
+# autobuild.sh 内部使用相对路径 build/ lib/ debug/|release/，必须先 cd 到 SDK 目录执行
+vpu_sdk: | $(BIN_DIR)
+	test -f $(VPU_SDK_AUTOBUILD) || { echo "error: $(VPU_SDK_AUTOBUILD) not found"; exit 1; }
+	cd $(VPU_SDK_DIR) && $(SDK_ENV) sh ./autobuild.sh $(SDK_FLAGS)
+	@for f in $(SDK_EXPECT_LIBS); do \
+		test -f "$(VPU_SDK_DIR)/lib/$$f" || \
+			{ echo "error: $$f not built, autobuild.sh failed"; exit 1; }; \
+	done
+#	mkdir -p $(VPU_SDK_OUT)/lib $(VPU_SDK_OUT)/include $(VPU_SDK_OUT)/bin
+#	cp -f $(VPU_SDK_DIR)/lib/*.so $(VPU_SDK_OUT)/
+#	@if ls $(VPU_SDK_DIR)/lib/*.a >/dev/null 2>&1; then \
+		cp -f $(VPU_SDK_DIR)/lib/*.a $(VPU_SDK_OUT)/; \
+	fi
+#	cp -rf $(VPU_SDK_DIR)/inc/. $(VPU_SDK_OUT)/include/
+	@if [ -d "$(VPU_SDK_DIR)/sample/build/out" ]; then \
+		find $(VPU_SDK_DIR)/sample/build/out -maxdepth 1 -type f -executable \
+			-exec cp -f {} $(VPU_SDK_OUT)/ \; ; \
+	fi
+	@echo ">>> vmpp installed to $(VPU_SDK_OUT)"
+	@echo ">>> package into guest: make payload INITRAMFS_OVERLAY=$(VPU_SDK_OUT)"
+
+vpu_sdk_clean:
+	$(RM) -r $(VPU_SDK_DIR)/build $(VPU_SDK_DIR)/lib \
+		$(VPU_SDK_DIR)/debug $(VPU_SDK_DIR)/release
+	$(RM) -r $(VPU_SDK_OUT)
+
 
 
 kernel-config:
@@ -150,7 +229,12 @@ vpu_driver:
 
 initramfs: tools kernel-image driver mem_driver vpu_driver $(INITRAMFS)
 
-$(INITRAMFS): $(INIT) $(LAUNCHER_IMAGE) $(MODULE) scripts/mkinitramfs.sh
+# mkinitramfs.sh 直接把 $(BIN_DIR) 下的样本装进镜像，所以样本重建后必须重新打包，
+# 否则 guest 里跑的还是旧产物（典型症状：明明换了静态链接，还是 "not found"）。
+# $(BIN_DIR)/vmpp 只是宿主机二次开发用的 .a/.so/头文件，不进 initramfs，故排除。
+GUEST_BINS := $(filter-out $(BIN_DIR)/vmpp,$(wildcard $(BIN_DIR)/*))
+
+$(INITRAMFS): $(INIT) $(LAUNCHER_IMAGE) $(MODULE) scripts/mkinitramfs.sh $(GUEST_BINS)
 	@if test -n "$(ROOTFS)" -a -f $(ROOTFS); then \
 		echo "initramfs using rootfs: $(ROOTFS)"; \
 		./scripts/mkinitramfs.sh $(ROOTFS) $(LAUNCHER_IMAGE) $(MODULE) $@ \
@@ -186,4 +270,5 @@ clean:
 	fi
 	$(MAKE) -C $(ENC_USERSPACE_DIR) clean
 	$(MAKE) -C $(DEC_USERSPACE_DIR) clean
+	$(MAKE) vpu_sdk_clean
 	$(RM) -rf $(BUILD) $(BIN_DIR)

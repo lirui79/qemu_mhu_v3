@@ -1,0 +1,29 @@
+{
+	"decDevice": "/dev/hantrodec",
+	"memDevice": "/dev/memalloc",
+	"sources": [{
+			"index": 1,
+			"input": "/home/stone/workspace/akiyo_352x288_300_IBBBP.h264",
+			"output": "/home/stone/workspace/OUTPUT/YUV/akiyo_352x288_300f_420p.yuv",
+			"codec": "h264"
+		},
+		{
+			"index": 2,
+			"input": "/home/stone/workspace/sintel_trailer_1920x1080p_1253_IBBBP.h264",
+			"output": "/home/stone/workspace/OUTPUT/YUV/sintel_trailer_1920x1080p_1253f_420p.yuv",
+			"codec":"h264"
+		},
+		{
+			"index": 3,
+			"input": "/home/stone/workspace/sample_1920x1080.hevc",
+			"output": "/home/stone/workspace/OUTPUT/YUV/sample_1920x1080_420p.yuv",
+			"codec": "hevc"
+		},
+		{
+			"index": 4,
+			"input": "/home/stone/workspace/sample_640x360.hevc",
+			"output": "/home/stone/workspace/OUTPUT/YUV/sample_640x360_420p.yuv",
+			"codec": "hevc"
+		}
+	]
+}

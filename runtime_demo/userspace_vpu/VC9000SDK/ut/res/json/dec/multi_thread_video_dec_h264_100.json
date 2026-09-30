@@ -1,0 +1,484 @@
+{
+	"sources": [
+		{
+			"index": 1,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt0.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 2,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_10.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 3,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt0.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 4,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt1.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 5,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_11.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 6,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt1.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 7,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt2.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 8,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_12.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 9,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt2.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 10,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt3.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 11,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt01.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 12,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_101.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 13,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt01.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 14,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt11.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 15,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_111.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 16,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt11.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 17,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt21.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 18,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_121.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 19,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt21.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 20,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt31.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 21,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt02.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 22,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_102.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 23,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt02.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 24,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt12.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 25,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_112.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 26,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt12.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 27,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt22.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 28,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_122.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 29,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt22.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 30,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt32.yuv",
+			"device": "/dev/vastai_video1",
+			"codec": "h264",
+			"output_align": 0
+		},
+        {
+			"index": 1,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt0.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 2,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_10.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 3,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt0.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 4,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt1.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 5,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_11.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 6,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt1.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 7,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt2.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 8,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_12.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 9,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt2.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 10,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt3.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 11,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt01.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 12,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_101.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 13,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt01.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 14,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt11.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 15,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_111.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 16,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt11.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 17,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt21.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 18,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_121.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 19,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt21.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 20,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt31.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 21,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt02.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 22,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_102.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 23,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt02.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 24,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt12.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 25,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_112.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 26,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt12.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 27,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt22.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 28,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt_122.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 29,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt22.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		},
+		{
+			"index": 30,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt32.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		}
+	]
+}

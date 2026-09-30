@@ -1,0 +1,35 @@
+{
+	"params": [
+		{
+			"frameRateNum": 30,
+			"frameRateDen": 1,
+			"bitDepthLuma": 8,
+			"bitDepthChroma": 8,
+			"gopSize": 0,
+			"gdrDuration": 0,
+			"lookaheadDepth": 0,
+			"qualityMode": 3,
+			"tune": 0,
+			"keyInt": 0,
+			"crf": -1,
+			"cqp": 0,
+			"llRc": 0,
+			"bitRate": 0,
+			"initQp": -1,
+			"intraQpDelta": 52,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/vbvBufSize": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/vbvMaxRate": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMinI": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMaxI": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMinPB": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMaxPB": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/aqStrength": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/P2B": 0,
+			"bBPyramid": 1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/maxFrameSizeMultiple": 0,
+			"roiInt": 0,
+			"extSEIInt": 0,
+			"forceIDRInt": 0
+		}
+	]
+}

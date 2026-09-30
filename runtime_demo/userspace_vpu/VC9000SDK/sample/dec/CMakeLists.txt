@@ -1,0 +1,4 @@
+add_subdirectory(jpeg_dec)
+add_subdirectory(video_dec)
+add_subdirectory(multi_thread_jpeg_dec)
+add_subdirectory(multi_thread_video_dec)

@@ -45,6 +45,9 @@ int32_t        cmdr52_session_check(cmdr52_session_t *session, cmdMsg_t *cmdMsg)
         cmdSBody->sessionID = cmdMsg->sessionID;
         cmdSBody->procObj   = session->procObj;
         cmdSBody->timeStamp = cmdMsg->timeStamp;
+        ts_err("QUEUE:ptr=%08x magic=%x ver=%d type=%x size=%u sid=%x seq=%x crc32=%x recv seq=%x\n", \
+            (uint32_t)(uintptr_t)cmdMsg, cmdMsg->magic, cmdMsg->version, cmdMsg->cmdType, \
+            cmdMsg->cmdSize, cmdMsg->sessionID, cmdMsg->seqNum, cmdMsg->crc32, session->seqRNum);
         cmdr52_session_send(session, cmdSMsg);
         cmdr52_mgr_release_cmdMsg(cmdSMsg);
         return CMD_ERR_INVALID_SEQUENCEID;
@@ -88,7 +91,7 @@ static int32_t cmd_system_open_session(cmdr52_session_t *session, cmdMsg_t *cmdM
 
     cmdSBody->code       = retCode;
 
-    ts_printf("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, r52CoreID, cmdr52_session->sessionID);
+    ts_info("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, r52CoreID, cmdr52_session->sessionID);
     retCode = cmdr52_session_send(session, cmdSMsg);
     cmdr52_mgr_release_cmdMsg(cmdSMsg);
     return retCode;
@@ -125,7 +128,7 @@ static int32_t cmd_system_close_session(cmdr52_session_t *session, cmdMsg_t *cmd
     cmdSBody->code       = retCode;
     cmdSBody->procObj    = cmdBody->procObj;
 
-    ts_printf("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, ((session->sessionID & 0xFFFF0000) >> 16), cmdr52_session->sessionID);
+    ts_info("******************%s:%s:%d %d r52CoreID %d %x******************\n", __FILE__, __func__, __LINE__, retCode, ((session->sessionID & 0xFFFF0000) >> 16), cmdr52_session->sessionID);
     retCode = cmdr52_session_send(session, cmdSMsg);
     cmdr52_mgr_release_cmdMsg(cmdSMsg);
     return retCode;
@@ -295,7 +298,7 @@ int32_t        cmdr52_session_send(cmdr52_session_t *session, cmdMsg_t *cmdMsg) 
     cmdMsg->crc32        = crc32_calc((const uint8_t *)cmdMsg, cmdMsg->cmdSize);
     snsz                 = mhu_send_data(ch, (void*)cmdMsg, cmdMsg->cmdSize);
     if (snsz != cmdMsg->cmdSize) {
-        ts_printf("Failed to send cmd, ret %u\n", snsz);
+        ts_err("Failed to send cmd size:%d, ret %u\n", cmdMsg->cmdSize, snsz);
         return -1;
     }
     return 0;

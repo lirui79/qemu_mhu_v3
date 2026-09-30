@@ -1,0 +1,8 @@
+{
+	"params": [
+		{
+			"vbvBufSize": 200,
+			"vbvMaxRate": 800
+		}
+	]
+}

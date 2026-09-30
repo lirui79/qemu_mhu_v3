@@ -1,0 +1,43 @@
+{
+	"params": [
+		{
+			"frameRateNum": 30,
+			"frameRateDen": 1,
+			"bitDepthLuma": 8,
+			"bitDepthChroma": 8,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/gopSize": -1,
+			"gdrDuration": 0,
+			"lookaheadDepth": 0,
+			"qualityMode": 3,
+			"tune": 0,
+			"keyInt": 250,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/crf": -1,
+			"cqp": 0,
+			"llRc": 0,
+			"bitRate": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/initQp": -1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/vbvBufSize": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/vbvMaxRate": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMinI": -1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMaxI": -1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMinPB": -1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMaxPB": -1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/aqStrength": -1.0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/P2B": -1,
+			"bBPyramid": 1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/maxFrameSizeMultiple": -1.0,
+			"/*remove this comment to set this value, default value is 800000*/maxFrameSize": 800000,
+			"roiInt": 0,
+			"extSEIInt": 0,
+			"forceIDRInt": 0,
+			"maxBFrames": 7,
+			"hrd": 0,
+			"picSkip": 0,
+			"vfr": 0,
+			"svcTLayers": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/svcExtractMaxTLayer": -1,
+			"sliceSize": 0,
+			"enableDynamicCrf": 0
+		}
+	]
+}
