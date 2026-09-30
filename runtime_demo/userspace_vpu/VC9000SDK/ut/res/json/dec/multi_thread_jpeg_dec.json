@@ -1,0 +1,16 @@
+{
+	"sources": [
+		{
+			"index": 1,
+			"input": "dec/stream1.jpg",
+			"output": "yuv/stream1.yuv",
+			"device": "/dev/vastai_video0"
+		},
+		{
+			"index": 2,
+			"input": "dec/stream3.jpg",
+			"output": "yuv/stream3.yuv",
+			"device": "/dev/vastai_video0"
+		}
+	]
+}

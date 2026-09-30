@@ -465,7 +465,9 @@ static int __init vcx_vcodec_init(void)
         pr_info("Registered platform device: %s.%d\n", VCX_DRIVER_NAME, i);
     }
     printk("%s:%s:%d recv\n", __FILE__, __func__, __LINE__);
+#ifdef MAILBOX_CLIENT
     cmda78_start_mgr();
+#endif
     return 0;
 
 err_unregister_devices:

@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+setup.py
+npu_codec_bridge/__init__.py
+npu_codec_bridge.egg-info/PKG-INFO
+npu_codec_bridge.egg-info/SOURCES.txt
+npu_codec_bridge.egg-info/dependency_links.txt
+npu_codec_bridge.egg-info/requires.txt
+npu_codec_bridge.egg-info/top_level.txt
+tests/test_npu_decoder.py

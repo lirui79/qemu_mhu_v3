@@ -11,8 +11,12 @@
 	chosen {
 		stdout-path = "serial0:115200n8";
 		bootargs = "console=ttyAMA0,115200 earlycon=pl011,0xd0000000 rdinit=/init loglevel=8";
+		/* initramfs 窗口：0x84100000 = DDR_BASE(0x80000000) + payload 加载偏移(0x100000)
+		 * + payload 内 initramfs 偏移(0x4000000)；大小必须等于 scripts/mkpayload.sh
+		 * 的 INITRAMFS_LIMIT（当前 128MB），改一边就要改另一边。
+		 * 上限受 r52_memalloc(0x8F000000) 限制，窗口不能再往上吃。 */
 		linux,initrd-start = <0x0 0x84100000>;
-		linux,initrd-end = <0x0 0x85100000>;
+		linux,initrd-end = <0x0 0x8C100000>;
 	};
 	cpus {
 		#address-cells = <1>;

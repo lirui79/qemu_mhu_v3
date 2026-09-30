@@ -1,0 +1,75 @@
+#######################################################
+##############   SOURCE SOURCE SOURCE    ##############
+#######################################################
+# CATCH2
+set(CATCH2_INC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# HEAD FILE
+# set(VMPP_LIB_DIR ${CMAKE_SOURCE_DIR}/build/out)
+set(VMPP_INC_DIR ${CMAKE_SOURCE_DIR}/inc)
+set(VMPP_COMMON_DIR ${CMAKE_SOURCE_DIR}/sample/common)
+set(VMPP_SRC_ENC_INC_DIR ${CMAKE_SOURCE_DIR}/src/enc/inc)
+set(VMPP_SRC_SOFTWARE_INC_DIR ${CMAKE_SOURCE_DIR}/src/enc/lib/software/inc)
+set(VMPP_SRC_SOURCE_INC_DIR ${CMAKE_SOURCE_DIR}/src/dec/lib/software/source/inc)
+set(VMPP_SRC_SOURCE_COMMON_DIR ${CMAKE_SOURCE_DIR}/src/dec/lib/software/source/common)
+
+include_directories(${CATCH2_INC_DIR} ${VMPP_INC_DIR} ${VMPP_COMMON_DIR})
+include_directories(${VMPP_SRC_ENC_INC_DIR} ${VMPP_SRC_SOFTWARE_INC_DIR} ${VMPP_SRC_SOURCE_INC_DIR} ${VMPP_SRC_SOURCE_COMMON_DIR})
+
+set(ut_HEADERS
+    ${VMPP_COMMON_DIR}/defs.h
+    ${VMPP_COMMON_DIR}/stream.h
+    ${VMPP_COMMON_DIR}/utils.h
+    ${VMPP_COMMON_DIR}/queue.h
+    ${VMPP_COMMON_DIR}/log.h
+    ${VMPP_COMMON_DIR}/md5.h
+#    ${VMPP_COMMON_DIR}/utils.h
+#    ${CMAKE_SOURCE_DIR}/decode.h
+#    ${CMAKE_SOURCE_DIR}/encode.h
+#    ${CMAKE_SOURCE_DIR}/transcode.h
+#    ${VMPP_COMMON_DIR}/queue.h
+	)
+
+set(ut_SOURCES
+    ${VMPP_COMMON_DIR}/stream.c
+    ${VMPP_COMMON_DIR}/utils.c
+    ${VMPP_COMMON_DIR}/queue.c
+    ${VMPP_COMMON_DIR}/log.c
+    ${VMPP_COMMON_DIR}/md5.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/decode.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/encode.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/transcode.cpp
+	)
+
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/unitest/)
+add_compile_definitions(UT_RES_PATH="${CMAKE_CURRENT_SOURCE_DIR}/res")
+add_definitions("-Wall -g")
+
+add_executable(unitest
+    ${ut_HEADERS}
+    ${ut_SOURCES}
+    ut.cpp)
+
+target_link_libraries(
+    unitest
+    PUBLIC
+    -Wl,--whole-archive
+    -Wl,--start-group
+    -Wl,-Bstatic
+    -Wl,-Bdynamic
+    -Wl,--end-group
+    -Wl,--no-whole-archive
+    pthread
+    dl
+    m
+)
+
+target_link_libraries(
+    unitest
+    PRIVATE
+    vmpp-dec
+    vmpp-enc
+)
+set (CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_SOURCE_DIR}/ut/ctest")
+include(Catch)
+catch_discover_tests(unitest)

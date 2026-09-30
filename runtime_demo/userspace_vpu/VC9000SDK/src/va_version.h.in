@@ -1,0 +1,26 @@
+/*
+ * Copyright (c) 2022, Vastai Tech. All rights reserved
+ *
+ * The information contained herein is confidential
+ * property of Company. The user, copying, transfer or
+ * disclosure of such information is prohibited except
+ * by express written agreement with VASTAITECH.
+ */
+#ifndef __VA_VERSION_H__
+#define __VA_VERSION_H__
+
+/* decoder version  */
+#define LIBDEC_VERSION_MAJOR ${LIB_DEC_VERSION_MAJOR}
+#define LIBDEC_VERSION_MINOR ${LIB_DEC_VERSION_MINOR}
+
+/* encoder version  */
+#define LIBENC_VERSION_MAJOR ${LIB_ENC_VERSION_MAJOR}
+#define LIBENC_VERSION_MINOR ${LIB_ENC_VERSION_MINOR}
+
+/* build version for both encoder & decoder */
+#define LIB_VERSION_BUILD ${VERSION_BUILD}
+
+/* version string for both encoder & decoder */
+#define LIB_VERSION_STRING ${lib_version_STRING}
+
+#endif  // __VA_VERSION_H__

@@ -1,0 +1,41 @@
+{
+	"params": [
+		{
+			"profile": 0,
+			"level": 0,
+			"frameRateNum": 30,
+			"frameRateDen": 1,
+			"bitDepthLuma": 8,
+			"bitDepthChroma": 8,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/gopSize": 0,
+			"gdrDuration": 0,
+			"lookaheadDepth": 0,
+			"qualityMode": 3,
+			"tune": 0,
+			"keyInt": 0,
+			"crf": -1,
+			"cqp": 0,
+			"llRc": 0,
+			"bitRate": 0,
+			"initQp": -1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/vbvBufSize": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/vbvMaxRate": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMinI": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMaxI": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMinPB": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/qpMaxPB": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/aqStrength": 0,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/P2B": 0,
+			"bBPyramid": 1,
+			"/*remove this comment to set this value, default value is 0xFFFFFFFF*/maxFrameSizeMultiple": 0,
+			"roiType": 3,
+			"roiInt": 38,
+			"extSEIInt": 0,
+			"forceIDRInt": 0,
+			"logLevel": 0,
+			"roiMapDeltaQpBlockUnit": 2,
+			"roiMapQpDeltaVersion": 0,
+			"enableDynamicBitrate": 0
+		}
+	]
+}

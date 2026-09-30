@@ -1,0 +1,8 @@
+{
+	"params": [
+		{
+			"svcTLayers": 3,
+			"svcExtractMaxTLayer": 2
+		}
+	]
+}

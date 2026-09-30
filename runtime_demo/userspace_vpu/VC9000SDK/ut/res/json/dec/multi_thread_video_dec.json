@@ -1,0 +1,28 @@
+{
+	"sources": [
+		{
+			"index": 1,
+			"input": "dec/cdzj.hevc",
+			"output": "yuv/cdzjhevc_mt0.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "hevc",
+			"output_align": 0
+		},
+		{
+			"index": 2,
+			"input": "dec/cdzj_trans.hevc",
+			"output": "yuv/cdzjhevc_mt_10.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "hevc",
+			"output_align": 0
+		},
+		{
+			"index": 3,
+			"input": "dec/cdzj.h264",
+			"output": "yuv/cdzjhevc_mt1.yuv",
+			"device": "/dev/vastai_video0",
+			"codec": "h264",
+			"output_align": 0
+		}
+	]
+}

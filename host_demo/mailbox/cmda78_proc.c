@@ -55,7 +55,7 @@ static void fifochan_irq_callback_t(uint32_t irq, uint32_t channel) {
         wake_up_interruptible_from_isr(&rmgr->workwaitqueue, &xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
- 
+
     ts_printf("fifochan_irq_callback_t %u %u\n", irq, channel);
 }
 

@@ -1,0 +1,7 @@
+{
+	"params": [
+		{
+			"lookaheadDepth": 20
+		}
+	]
+}

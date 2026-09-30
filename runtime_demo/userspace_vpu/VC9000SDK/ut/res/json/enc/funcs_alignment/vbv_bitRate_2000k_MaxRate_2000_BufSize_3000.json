@@ -1,0 +1,9 @@
+{
+	"params": [
+		{
+			"bitRate": 2000000,
+			"vbvBufSize": 3000,
+			"vbvMaxRate": 2000
+		}
+	]
+}
